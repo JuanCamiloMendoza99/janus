@@ -1,0 +1,4 @@
+# Normalize line endings in the repo regardless of the checkout platform.
+# Development happens on Windows; CI runs on Linux. Without this, whitespace-only
+# diffs appear whenever a file crosses between them.
+* text=auto eol=lf
