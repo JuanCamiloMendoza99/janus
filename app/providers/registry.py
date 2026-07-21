@@ -37,6 +37,7 @@ def build_provider(settings: Settings) -> LLMProvider:
                 api_key=settings.anthropic_api_key,
                 model=settings.anthropic_model,
                 max_output_tokens=settings.max_output_tokens,
+                prompt_caching_enabled=settings.prompt_caching_enabled,
             )
         case "openai":
             if not settings.openai_api_key:
