@@ -22,8 +22,11 @@ through the domain signatures would put observability in the business types.
 from __future__ import annotations
 
 import contextvars
+import threading
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
+from app.core.pricing import compute_cost_usd
 from app.providers.base import Usage
 
 _ledger_var: contextvars.ContextVar[UsageLedger | None] = contextvars.ContextVar(
@@ -48,7 +51,14 @@ class UsageLedger:
 
     def record(self, provider: str, usage: Usage) -> None:
         """Append a completed model call, pricing it as it lands."""
-        raise NotImplementedError("Phase 1")
+        cost = compute_cost_usd(
+            model=usage.model,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_read_tokens=usage.cache_read_tokens,
+            cache_write_tokens=usage.cache_write_tokens,
+        )
+        self.entries.append(LedgerEntry(provider=provider, usage=usage, cost_usd=cost))
 
     @property
     def total_cost_usd(self) -> float:
@@ -60,7 +70,16 @@ class UsageLedger:
 
     def summary(self) -> dict[str, object]:
         """Flatten to the shape emitted in the per-request cost log line."""
-        raise NotImplementedError("Phase 1")
+        return {
+            "calls": self.call_count,
+            "cost_usd": round(self.total_cost_usd, 6),
+            "input_tokens": sum(e.usage.input_tokens for e in self.entries),
+            "output_tokens": sum(e.usage.output_tokens for e in self.entries),
+            "cache_read_tokens": sum(e.usage.cache_read_tokens for e in self.entries),
+            "cache_write_tokens": sum(e.usage.cache_write_tokens for e in self.entries),
+            "models": sorted({e.usage.model for e in self.entries}),
+            "providers": sorted({e.provider for e in self.entries}),
+        }
 
 
 def new_ledger() -> UsageLedger:
@@ -78,3 +97,90 @@ def current_ledger() -> UsageLedger | None:
     accounting is not allowed to break the call path it is measuring.
     """
     return _ledger_var.get()
+
+
+# --------------------------------------------------------------------------
+# Process-wide aggregate
+# --------------------------------------------------------------------------
+#
+# The per-request ledger above answers "what did *this* request cost". `GET
+# /v1/usage` needs "what has this process cost since it started", so the
+# middleware folds each finished request's ledger into this in-memory store. It
+# resets on restart — persisting spend is a database concern the project
+# deliberately stays out of, and that limitation is stated in the README.
+
+
+@dataclass(frozen=True)
+class UsageSnapshot:
+    """An immutable read of the process-wide totals."""
+
+    since: datetime
+    requests: int
+    total_cost_usd: float
+    total_input_tokens: int
+    total_output_tokens: int
+    total_cache_read_tokens: int
+    total_prompt_tokens: int
+    by_model: dict[str, float]
+
+    @property
+    def cache_hit_rate(self) -> float:
+        """Fraction of prompt tokens served from cache across all requests.
+
+        The honest measure of whether prompt caching is doing anything: a marker
+        that was accepted but never hit leaves this at 0.
+        """
+        if self.total_prompt_tokens == 0:
+            return 0.0
+        return self.total_cache_read_tokens / self.total_prompt_tokens
+
+
+class UsageStore:
+    """Thread-safe accumulator of every request served since process start."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.reset()
+
+    def reset(self) -> None:
+        """Zero every total. Used at construction and by tests for isolation."""
+        with self._lock:
+            self._started_at = datetime.now(UTC)
+            self._requests = 0
+            self._input_tokens = 0
+            self._output_tokens = 0
+            self._cache_read_tokens = 0
+            self._prompt_tokens = 0
+            self._cost_usd = 0.0
+            self._by_model: dict[str, float] = {}
+
+    def record_request(self, ledger: UsageLedger) -> None:
+        """Fold one finished request's ledger into the running totals."""
+        with self._lock:
+            self._requests += 1
+            for entry in ledger.entries:
+                usage = entry.usage
+                self._input_tokens += usage.input_tokens
+                self._output_tokens += usage.output_tokens
+                self._cache_read_tokens += usage.cache_read_tokens
+                self._prompt_tokens += usage.total_prompt_tokens
+                self._cost_usd += entry.cost_usd
+                self._by_model[usage.model] = self._by_model.get(usage.model, 0.0) + entry.cost_usd
+
+    def snapshot(self) -> UsageSnapshot:
+        """Return a consistent read of the current totals."""
+        with self._lock:
+            return UsageSnapshot(
+                since=self._started_at,
+                requests=self._requests,
+                total_cost_usd=self._cost_usd,
+                total_input_tokens=self._input_tokens,
+                total_output_tokens=self._output_tokens,
+                total_cache_read_tokens=self._cache_read_tokens,
+                total_prompt_tokens=self._prompt_tokens,
+                by_model=dict(self._by_model),
+            )
+
+
+#: Process-wide singleton the cost middleware writes and `/v1/usage` reads.
+usage_store = UsageStore()
