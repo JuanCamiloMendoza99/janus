@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.observability.ledger import current_ledger
 from app.providers.base import (
@@ -27,6 +27,7 @@ from app.providers.base import (
     Done,
     ParsedCompletion,
     Prompt,
+    ProviderError,
     StreamEvent,
     TextDelta,
     ToolCall,
@@ -193,7 +194,30 @@ class FakeProvider:
 
         Only works for schemas whose fields are all defaulted or optional. That
         is a real limitation and it is left in on purpose: a fake that
-        fabricates plausible values for required fields would let a broken
-        schema pass its tests.
+        fabricates plausible values for required fields would satisfy *any*
+        schema, which means no schema change could ever fail a test — and
+        `TriageResult`, whose whole point is that every field is required, would
+        be the first thing it stopped checking.
+
+        So `POST /v1/triage` does not work on the fake provider. It raises here,
+        loudly and with the reason, rather than returning a fabricated verdict
+        that looks real in a demo.
         """
-        raise NotImplementedError("Phase 3")
+        try:
+            parsed = schema()
+        except ValidationError as exc:
+            raise ProviderError(
+                message=(
+                    f"FakeProvider cannot produce a {schema.__name__}: it builds instances "
+                    "from field defaults only, and this schema has required fields. Set "
+                    "LLM_PROVIDER to a real vendor, or override the provider dependency "
+                    "with a test double that returns a canned result."
+                ),
+                provider=self.name,
+                retryable=False,
+                status_code=501,
+            ) from exc
+
+        usage = self._usage(prompt, "")
+        self._record(usage)
+        return ParsedCompletion(parsed=parsed, usage=usage)

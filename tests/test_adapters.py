@@ -10,6 +10,10 @@ Two things in the adapters are worth testing offline, because both fail
    are not valid JSON on their own. Assembling them wrongly produces empty or
    truncated arguments, which look like a confused *model* rather than a broken
    adapter.
+3. **Where the cache marker lands, and what happens when a schema is not
+   honored.** A marker on the wrong block turns caching off with no error, and
+   an unparseable structured response has three different causes that need three
+   different responses from the caller.
 
 The SDK clients are replaced with stubs that emit the wire shapes the vendors
 document. That is the honest limit of this file: it proves the adapter handles
@@ -23,13 +27,17 @@ from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import Any
 
+import openai
 import pytest
+from pydantic import BaseModel
 
+from app.observability.ledger import new_ledger
 from app.providers.anthropic import AnthropicProvider
 from app.providers.base import (
     Done,
     Message,
     Prompt,
+    ProviderError,
     TextDelta,
     ToolCall,
     ToolCallRequested,
@@ -37,6 +45,12 @@ from app.providers.base import (
 )
 from app.providers.openai import OpenAIProvider
 from app.tools.registry import get_tool_specs
+
+
+class Verdict(BaseModel):
+    """A stand-in for `TriageResult` — the adapters are schema-agnostic."""
+
+    label: str
 
 
 @pytest.fixture
@@ -355,3 +369,242 @@ async def test_unparseable_arguments_still_reach_the_loop(
 
     calls = [e.call for e in emitted if isinstance(e, ToolCallRequested)]
     assert calls == [ToolCall(id="call-1", name="search_kb", arguments={})]
+
+
+# -- prompt caching ---------------------------------------------------------
+
+
+def _prompt(prefix: str | None = "playbook", system: str | None = None) -> Prompt:
+    return Prompt(
+        cacheable_prefix=prefix,
+        system=system,
+        messages=[Message(role="user", content="ticket")],
+    )
+
+
+def test_the_cache_marker_lands_on_the_stable_prefix_only(
+    anthropic_provider: AnthropicProvider,
+) -> None:
+    """Marking the volatile block would cache a prefix that changes per request.
+
+    The result is not an error — it is a cache entry written once and never read
+    again, which looks exactly like caching being off.
+    """
+    system = anthropic_provider._request_kwargs(_prompt(system="per-request note"))["system"]
+
+    assert [block["text"] for block in system] == ["playbook", "per-request note"]
+    assert system[0]["cache_control"] == {"type": "ephemeral"}
+    assert "cache_control" not in system[1]
+
+
+def test_caching_can_be_turned_off_without_changing_the_prompt() -> None:
+    """`PROMPT_CACHING_ENABLED=false` drops the marker and nothing else.
+
+    Worth pinning: the point of the setting is to A/B the cost of caching, which
+    only means anything if the two runs send identical text.
+    """
+    provider = AnthropicProvider(
+        api_key="sk-test",
+        model="claude-sonnet-5",
+        max_output_tokens=1024,
+        prompt_caching_enabled=False,
+    )
+
+    system = provider._request_kwargs(_prompt())["system"]
+
+    assert system == [{"type": "text", "text": "playbook"}]
+
+
+# -- structured output ------------------------------------------------------
+
+
+def _anthropic_parse_stub(
+    *,
+    parsed: Any,
+    stop_reason: str = "end_turn",
+    capture: dict[str, Any] | None = None,
+) -> Any:
+    """A stand-in for `client.messages.parse(...)`."""
+
+    async def parse(**kwargs: Any) -> Any:
+        if capture is not None:
+            capture.update(kwargs)
+        return SimpleNamespace(
+            parsed_output=parsed,
+            stop_reason=stop_reason,
+            usage=SimpleNamespace(
+                input_tokens=12,
+                output_tokens=34,
+                cache_read_input_tokens=6594,
+                cache_creation_input_tokens=0,
+            ),
+        )
+
+    return SimpleNamespace(messages=SimpleNamespace(parse=parse))
+
+
+async def test_anthropic_parse_returns_the_validated_model(
+    anthropic_provider: AnthropicProvider,
+) -> None:
+    capture: dict[str, Any] = {}
+    anthropic_provider._client = _anthropic_parse_stub(
+        parsed=Verdict(label="billing"), capture=capture
+    )
+
+    result = await anthropic_provider.parse(_prompt(), Verdict)
+
+    assert result.parsed == Verdict(label="billing")
+    assert result.usage.cache_read_tokens == 6594
+    # The schema is handed to the SDK as a constraint on decoding, not appended
+    # to the prompt as a request the model may ignore.
+    assert capture["output_format"] is Verdict
+    # Sonnet 5 thinks adaptively whenever the parameter is omitted; classifying
+    # against a closed enum does not need it and it would eat into max_tokens.
+    assert capture["thinking"] == {"type": "disabled"}
+    # And the request still carries the cached prefix.
+    assert capture["system"][0]["cache_control"] == {"type": "ephemeral"}
+
+
+@pytest.mark.parametrize(
+    ("stop_reason", "expected_hint"),
+    [
+        ("max_tokens", "MAX_OUTPUT_TOKENS"),
+        ("refusal", "refused"),
+        ("end_turn", "stop_reason"),
+    ],
+)
+async def test_anthropic_parse_raises_rather_than_papering_over_a_bad_response(
+    anthropic_provider: AnthropicProvider, stop_reason: str, expected_hint: str
+) -> None:
+    """No fallback to `json.loads` on free text — the guarantee has to be real.
+
+    The three causes need three different responses (raise the cap, stop
+    retrying, investigate), so the message distinguishes them.
+    """
+    anthropic_provider._client = _anthropic_parse_stub(parsed=None, stop_reason=stop_reason)
+
+    with pytest.raises(ProviderError) as caught:
+        await anthropic_provider.parse(_prompt(), Verdict)
+
+    assert expected_hint in str(caught.value)
+    assert caught.value.retryable is False
+
+
+async def test_anthropic_parse_translates_a_validation_error_from_the_sdk(
+    anthropic_provider: AnthropicProvider,
+) -> None:
+    """Truncated JSON makes the SDK raise while validating, before returning.
+
+    Confirmed against the live API by capping `max_tokens` at 16: the failure
+    does not arrive as `parsed_output=None`, it arrives as a
+    `pydantic.ValidationError` out of the SDK's response parser. Uncaught, that
+    is a non-domain exception crossing the seam.
+    """
+
+    async def parse(**_: Any) -> Any:
+        Verdict.model_validate_json('{"label": "bil')
+
+    anthropic_provider._client = SimpleNamespace(messages=SimpleNamespace(parse=parse))
+
+    with pytest.raises(ProviderError, match="MAX_OUTPUT_TOKENS"):
+        await anthropic_provider.parse(_prompt(), Verdict)
+
+
+async def test_anthropic_parse_bills_the_ledger_even_when_it_fails(
+    anthropic_provider: AnthropicProvider,
+) -> None:
+    """The call was paid for whether or not the answer was usable.
+
+    A ledger that skips the failures understates spend in exactly the situation
+    where someone is retrying and wondering where the money went.
+    """
+    ledger = new_ledger()
+    anthropic_provider._client = _anthropic_parse_stub(parsed=None, stop_reason="max_tokens")
+
+    with pytest.raises(ProviderError):
+        await anthropic_provider.parse(_prompt(), Verdict)
+
+    assert ledger.call_count == 1
+    assert ledger.entries[0].usage.output_tokens == 34
+
+
+def _openai_parse_stub(
+    *,
+    parsed: Any = None,
+    refusal: str | None = None,
+    raises: Exception | None = None,
+    capture: dict[str, Any] | None = None,
+) -> Any:
+    """A stand-in for `client.chat.completions.parse(...)`."""
+
+    async def parse(**kwargs: Any) -> Any:
+        if capture is not None:
+            capture.update(kwargs)
+        if raises is not None:
+            raise raises
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(parsed=parsed, refusal=refusal))],
+            usage=SimpleNamespace(
+                prompt_tokens=120, completion_tokens=34, prompt_tokens_details=None
+            ),
+        )
+
+    return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(parse=parse)))
+
+
+async def test_openai_parse_returns_the_validated_model(
+    openai_provider: OpenAIProvider,
+) -> None:
+    capture: dict[str, Any] = {}
+    openai_provider._client = _openai_parse_stub(parsed=Verdict(label="billing"), capture=capture)
+
+    result = await openai_provider.parse(_prompt(), Verdict)
+
+    assert result.parsed == Verdict(label="billing")
+    assert result.usage.input_tokens == 120
+    assert capture["response_format"] is Verdict
+    # Reasoning-tier models reject the legacy `max_tokens` field with a 400.
+    assert "max_completion_tokens" in capture
+
+
+async def test_openai_parse_surfaces_a_refusal_as_a_provider_error(
+    openai_provider: OpenAIProvider,
+) -> None:
+    openai_provider._client = _openai_parse_stub(refusal="I can't help with that")
+
+    with pytest.raises(ProviderError, match="refused"):
+        await openai_provider.parse(_prompt(), Verdict)
+
+
+async def test_openai_parse_translates_the_sdks_non_api_exceptions(
+    openai_provider: OpenAIProvider,
+) -> None:
+    """`LengthFinishReasonError` descends from `OpenAIError`, not `APIError`.
+
+    So the `except openai.APIError` this adapter uses everywhere else does not
+    catch it, and without a clause of its own a vendor exception would escape
+    past the seam — the one thing ADR-001 exists to prevent. The truncated
+    completion is still billed, and the SDK hands it back on the exception, so
+    the ledger gets told about it.
+    """
+    ledger = new_ledger()
+    truncated = SimpleNamespace(
+        usage=SimpleNamespace(prompt_tokens=120, completion_tokens=4096, prompt_tokens_details=None)
+    )
+    openai_provider._client = _openai_parse_stub(
+        raises=openai.LengthFinishReasonError(completion=truncated)  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ProviderError, match="MAX_OUTPUT_TOKENS"):
+        await openai_provider.parse(_prompt(), Verdict)
+
+    assert ledger.entries[0].usage.output_tokens == 4096
+
+
+async def test_openai_parse_translates_a_content_filter_rejection(
+    openai_provider: OpenAIProvider,
+) -> None:
+    openai_provider._client = _openai_parse_stub(raises=openai.ContentFilterFinishReasonError())
+
+    with pytest.raises(ProviderError, match="content filter"):
+        await openai_provider.parse(_prompt(), Verdict)

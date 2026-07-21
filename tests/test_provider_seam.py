@@ -8,6 +8,7 @@ tests every future adapter must also pass.
 from __future__ import annotations
 
 import pytest
+from pydantic import BaseModel
 
 from app.core.config import Settings
 from app.providers.base import (
@@ -15,6 +16,7 @@ from app.providers.base import (
     LLMProvider,
     Message,
     Prompt,
+    ProviderError,
     TextDelta,
     Usage,
     UsageReport,
@@ -83,6 +85,43 @@ def test_usage_without_cache_reads_is_not_a_hit() -> None:
     usage = Usage(model="m", input_tokens=1000, output_tokens=50)
 
     assert usage.cache_hit is False
+
+
+async def test_fake_parse_builds_a_fully_defaulted_schema(
+    fake_provider: FakeProvider, prompt: Prompt
+) -> None:
+    """The fake's `parse()` is real enough to keep the cost path exercised."""
+
+    class Defaulted(BaseModel):
+        label: str = "unknown"
+        score: float = 0.0
+
+    result = await fake_provider.parse(prompt, Defaulted)
+
+    assert result.parsed == Defaulted()
+    assert result.usage.input_tokens > 0
+
+
+async def test_fake_parse_refuses_to_invent_required_fields(
+    fake_provider: FakeProvider, prompt: Prompt
+) -> None:
+    """The limitation is the feature.
+
+    A fake that fabricated values for required fields would satisfy every
+    schema, which means no schema could ever fail a test — and `TriageResult`,
+    whose whole point is that nothing is optional, would be the first thing it
+    stopped checking. So it raises, with a message that says what to do instead
+    (ADR-008).
+    """
+
+    class Required(BaseModel):
+        label: str
+
+    with pytest.raises(ProviderError, match="Required") as caught:
+        await fake_provider.parse(prompt, Required)
+
+    assert caught.value.status_code == 501
+    assert caught.value.retryable is False
 
 
 def test_registry_selects_the_fake_provider() -> None:
