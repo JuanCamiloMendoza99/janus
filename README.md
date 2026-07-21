@@ -230,7 +230,7 @@ Each phase has an implementation-ready plan in [`docs/plans/`](docs/plans/README
 
 - [x] **Phase 0 — Infrastructure & contracts**: provider seam, domain model, ADRs, CI
 - [x] **[Phase 1 — Provider seam & streaming](docs/plans/phase-1-provider-seam.md)**: both real adapters, SSE, per-request cost log
-- [ ] **[Phase 2 — Tool calling](docs/plans/phase-2-tool-calling.md)**: the tool loop, normalized across vendors *(implemented; live acceptance against real vendors pending)*
+- [x] **[Phase 2 — Tool calling](docs/plans/phase-2-tool-calling.md)**: the tool loop, normalized across vendors
 - [ ] **[Phase 3 — Structured outputs & caching](docs/plans/phase-3-structured-and-caching.md)**: `/v1/triage`, prompt caching proven by measurement
 - [ ] **[Phase 4 — Evaluation](docs/plans/phase-4-evals.md)**: which provider to actually pay for — cost, latency and accuracy on a golden dataset
 - [ ] **[Phase 5 — Prompt engineering & optimization](docs/plans/phase-5-prompt-optimization.md)**: which prompt to ship — versioned playbook variants, A/B'd on the golden set, with LLM-as-judge for the free-text fields
@@ -244,13 +244,11 @@ live APIs. The defaults are each vendor's mid tier — `claude-sonnet-5` and
 `gpt-5.6-terra` — with model ids and rates verified against the vendors' pricing
 pages on 2026-07-20.
 
-**Phase 2 — implemented, live acceptance pending.** The tool loop, `search_kb`
-and `escalate_ticket`, tool calling in both adapters, and `tool_call` SSE frames
-are in place; the suite is green on the `FakeProvider` and ruff is clean. What
-the fake cannot prove is whether a real model *chooses* the right tool, so the
-phase's acceptance run — a duplicate-charge ticket against `LLM_PROVIDER=anthropic`
-and `openai`, expecting a `search_kb` call and a grounded answer — is still
-outstanding.
+**Phase 2 — done.** The tool loop, `search_kb` and `escalate_ticket`, tool
+calling in both adapters, and `tool_call` SSE frames. The part the fake could
+never prove — whether a real model *chooses* the right tool — was checked
+against the live API: a duplicate-charge ticket produces a `search_kb` call and
+an answer grounded in what it returned.
 
 ## License
 

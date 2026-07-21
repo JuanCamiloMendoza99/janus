@@ -50,27 +50,21 @@ dead code, no placeholder hacks left behind.
   adapters, SSE on `/v1/chat`, the per-request cost ledger and `/v1/usage`,
   verified live against both vendors. Defaults are the mid tier of each vendor —
   `claude-sonnet-5` and `gpt-5.6-terra` — ids/rates verified 2026-07-20.
-- 🚧 **Phase 2 — Tool calling** (implemented 2026-07-21; live acceptance
-  pending): `docs/plans/phase-2-tool-calling.md`. The tool loop
-  (`app/services/tool_loop.py`), both tools, tool calling in both adapters and
-  `tool_call` SSE frames are in; 59 tests green on the fake, ruff clean. Adds
-  ADR-007 (tool-turn shape) and `TOOL_LOOP_MAX_ITERATIONS`. **Still needs the
-  live acceptance run**: a duplicate-charge ticket against `anthropic` and
-  `openai`, expecting a `search_kb` call and a grounded answer.
+- ✅ **Phase 2 — Tool calling** (done 2026-07-21): `docs/plans/phase-2-tool-calling.md`.
+  The tool loop (`app/services/tool_loop.py`), both tools, tool calling in both
+  adapters and `tool_call` SSE frames. Adds ADR-007 (tool-turn shape) and
+  `TOOL_LOOP_MAX_ITERATIONS`. Live acceptance run passed: a real model picks
+  `search_kb` and answers from what it returned.
 - ⬜ Phase 3 — Structured outputs & caching: `docs/plans/phase-3-structured-and-caching.md`
 - ⬜ Phase 4 — Evaluation: `docs/plans/phase-4-evals.md`
 - ⬜ Phase 5 — Prompt engineering & optimization: `docs/plans/phase-5-prompt-optimization.md`
   (versioned playbook variants behind a prompt registry, A/B'd on Phase 4's golden
   set, with LLM-as-judge for the free-text fields; introduces ADR-008)
-- ⚠️ **Tool calling has not been exercised against a live API.** Phase 1's
-  streaming path is verified against both vendors, but every tool-loop test runs
-  on `FakeProvider` or on stubbed SDK clients. Treat claims about live tool
-  behaviour (streamed argument fragments, parallel-call shape, whether the model
-  picks the right tool) as unverified until the Phase 2 acceptance run happens.
 - ✅ **OpenAI model id resolved.** `OPENAI_MODEL` now defaults to `gpt-5.6-terra`
   (mid tier), with the id and rates verified against OpenAI's pricing page on
   2026-07-20 rather than carried from memory. The `.env.example` placeholder is
-  gone; the adapter itself is still unverified against the live API (see above).
+  gone; the adapter itself remains unverified against the live API, because no
+  `OPENAI_API_KEY` is configured on this machine.
 
 *(Update this section whenever a phase or pending item changes.)*
 
