@@ -13,8 +13,8 @@ add any new ADRs to [`../architecture.md`](../architecture.md), and update the
 | Phase | Delivers | Status |
 |---|---|---|
 | 0 — Infrastructure & contracts | Repo scaffold, provider seam, ADRs, CI | ✅ done |
-| [1 — Provider seam & streaming](phase-1-provider-seam.md) | Both real adapters, SSE, cost ledger | ⬜ next |
-| [2 — Tool calling](phase-2-tool-calling.md) | The tool loop, two working tools | ⬜ |
+| [1 — Provider seam & streaming](phase-1-provider-seam.md) | Both real adapters, SSE, cost ledger | ✅ done |
+| [2 — Tool calling](phase-2-tool-calling.md) | The tool loop, two working tools | 🚧 live acceptance pending |
 | [3 — Structured outputs & caching](phase-3-structured-and-caching.md) | `/v1/triage`, proven prompt caching | ⬜ |
 | [4 — Evaluation](phase-4-evals.md) | Provider comparison: cost, latency, accuracy | ⬜ |
 | [5 — Prompt engineering & optimization](phase-5-prompt-optimization.md) | Versioned prompt variants, A/B on the golden set, LLM-as-judge | ⬜ |
