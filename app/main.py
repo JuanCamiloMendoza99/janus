@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
@@ -9,8 +11,19 @@ from fastapi import Depends, FastAPI
 from app.api import chat, triage, usage
 from app.api.schemas import HealthResponse
 from app.core.config import Settings, get_settings
+from app.core.logging import configure_logging
+from app.observability.middleware import CostLoggingMiddleware
 from app.providers.base import LLMProvider
 from app.providers.registry import get_provider
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Configure logging at startup — never at import time (ADR: see logging.py)."""
+    settings = get_settings()
+    configure_logging(settings.log_level, settings.log_format)
+    yield
+
 
 app = FastAPI(
     title="Janus",
@@ -20,11 +33,12 @@ app = FastAPI(
         "outputs, prompt caching and per-request cost accounting."
     ),
     version="0.1.0",
+    lifespan=lifespan,
 )
 
-# Phase 1 installs CostLoggingMiddleware here. It is intentionally not wired up
-# yet — an unimplemented middleware would break every request, including the
-# health check that proves the scaffold works.
+# Records token usage and a cost figure for every request, flushing after the
+# response body completes so streamed usage is captured (ADR-004).
+app.add_middleware(CostLoggingMiddleware)
 
 app.include_router(chat.router)
 app.include_router(triage.router)
