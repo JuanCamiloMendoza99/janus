@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     """Environment-driven configuration.
 
     Field order mirrors the roadmap: transport, provider selection, models,
-    caching, budgets, observability.
+    tools, caching, budgets, observability.
     """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     # --- Generation --------------------------------------------------------
     max_output_tokens: int = 4096
     request_timeout_seconds: float = 120.0
+
+    # --- Tools -------------------------------------------------------------
+    # How many model calls one tool-using request may make before the loop gives
+    # up. A model that keeps asking for the same tool would otherwise spend the
+    # budget one paid call at a time, with nothing to stop it.
+    tool_loop_max_iterations: int = 5
 
     # --- Prompt caching ----------------------------------------------------
     # Anthropic requires an explicit opt-in and a prefix above a per-model token
