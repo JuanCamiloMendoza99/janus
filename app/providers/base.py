@@ -29,48 +29,11 @@ StopReason = Literal["end_turn", "tool_use", "max_tokens", "refusal", "error"]
 
 
 # --------------------------------------------------------------------------
-# Prompt
-# --------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Message:
-    """A single conversation turn."""
-
-    role: Role
-    content: str
-
-
-@dataclass(frozen=True)
-class Prompt:
-    """A request's full input, split by *stability* rather than by role.
-
-    The split is the point. Prompt caching is a prefix match: the cacheable part
-    must be byte-identical across requests, and anything volatile placed before
-    it invalidates everything after. Modelling that as a distinct field makes
-    the constraint impossible to violate by accident — you cannot interpolate a
-    timestamp into `cacheable_prefix` without noticing what you are doing.
-
-    Attributes:
-        cacheable_prefix: Large, stable, reused verbatim across requests — the
-            support playbook, taxonomy, tool documentation. This is what each
-            adapter marks as cacheable in whatever way its vendor requires.
-            Must be genuinely large to have any effect: Anthropic silently
-            declines to cache prefixes below a per-model floor (~4096 tokens on
-            Opus 4.8). See ADR-003.
-        system: Volatile system-level instructions, if any. Rendered *after*
-            the cacheable prefix precisely because it may change per request.
-        messages: The conversation itself.
-    """
-
-    cacheable_prefix: str | None
-    system: str | None
-    messages: Sequence[Message]
-
-
-# --------------------------------------------------------------------------
 # Tools
 # --------------------------------------------------------------------------
+#
+# Declared before `Message` because a conversation turn can carry tool calls and
+# tool results.
 
 
 @dataclass(frozen=True)
@@ -113,6 +76,62 @@ class ToolResult:
     call_id: str
     content: str
     is_error: bool = False
+
+
+# --------------------------------------------------------------------------
+# Prompt
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Message:
+    """A single conversation turn.
+
+    Most turns are just `role` + `content`. The two extra fields exist for the
+    tool loop, which has to replay what happened back to the model:
+
+    * `tool_calls` belongs to an `assistant` turn — the calls the model made.
+    * `tool_results` belongs to a `tool` turn — the outcomes of those calls.
+
+    **Every result of a turn goes in ONE `tool` message.** That is Anthropic's
+    native shape, and it is also the behaviour we want: splitting results across
+    several messages teaches the model that its parallel calls were answered
+    one at a time, and it stops making them. OpenAI requires one message per
+    result, so its adapter fans this out — and that fan-out is the only place in
+    the codebase that knows about the difference (ADR-007).
+    """
+
+    role: Role
+    content: str = ""
+    tool_calls: Sequence[ToolCall] = ()
+    tool_results: Sequence[ToolResult] = ()
+
+
+@dataclass(frozen=True)
+class Prompt:
+    """A request's full input, split by *stability* rather than by role.
+
+    The split is the point. Prompt caching is a prefix match: the cacheable part
+    must be byte-identical across requests, and anything volatile placed before
+    it invalidates everything after. Modelling that as a distinct field makes
+    the constraint impossible to violate by accident — you cannot interpolate a
+    timestamp into `cacheable_prefix` without noticing what you are doing.
+
+    Attributes:
+        cacheable_prefix: Large, stable, reused verbatim across requests — the
+            support playbook, taxonomy, tool documentation. This is what each
+            adapter marks as cacheable in whatever way its vendor requires.
+            Must be genuinely large to have any effect: Anthropic silently
+            declines to cache prefixes below a per-model floor (~4096 tokens on
+            Opus 4.8). See ADR-003.
+        system: Volatile system-level instructions, if any. Rendered *after*
+            the cacheable prefix precisely because it may change per request.
+        messages: The conversation itself.
+    """
+
+    cacheable_prefix: str | None
+    system: str | None
+    messages: Sequence[Message]
 
 
 # --------------------------------------------------------------------------
@@ -259,6 +278,13 @@ class LLMProvider(Protocol):
         Must emit exactly one `UsageReport` before `Done` whenever the vendor
         reports usage, and must emit `Done` even when the call fails — the
         ledger and the SSE consumer both rely on a terminal event to finalize.
+
+        `ToolCallRequested` must carry fully-assembled arguments. Both vendors
+        stream tool arguments as partial JSON; reassembly is the adapter's job.
+
+        This is what the tool loop drives — every turn, not just the last one.
+        A loop built on `complete()` would stop `/v1/chat` from streaming the
+        final answer as soon as any tool was involved, which is most requests.
         """
         ...
 
@@ -269,8 +295,10 @@ class LLMProvider(Protocol):
     ) -> Completion:
         """Run a single non-streaming turn.
 
-        Used by the tool loop, where intermediate turns are not shown to the
-        user and streaming them would add complexity for no benefit.
+        The blocking sibling of `stream()`, for callers with no one watching
+        tokens appear — scripts, evaluations, and the seam's contract tests.
+        It returns the same `ToolCall`s the streamed path emits, so a future
+        batch caller gets tool use without a second implementation.
         """
         ...
 
