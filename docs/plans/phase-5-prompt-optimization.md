@@ -36,8 +36,9 @@ registry the project already has:
 The ADR-003 constraints carry over unchanged and the registry must not weaken
 them: every variant is loaded **as-is**, never templated (one variable byte
 invalidates the cache prefix), and every variant must sit above the per-model
-caching floor. New **ADR-008** records this decision. (ADR-007 was taken by the
-tool-turn shape in Phase 2 — ADRs are numbered in the order they are accepted.)
+caching floor. New **ADR-009** records this decision. (ADRs are numbered in the
+order they are accepted: 007 went to the tool-turn shape in Phase 2, and 008 to
+structured output as a constraint in Phase 3.)
 
 ### 2. Variants worth comparing
 
@@ -149,4 +150,4 @@ Done when:
       champion and the trade-off it accepts.
 - [ ] The default `TRIAGE_PROMPT` is the champion, and the total spend of the
       prompt sweep is documented.
-- [ ] ADR-008 records the prompt-registry seam.
+- [ ] ADR-009 records the prompt-registry seam.

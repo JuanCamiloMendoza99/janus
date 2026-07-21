@@ -179,6 +179,100 @@ parallel calls), and a tool failure comes back as a readable error result rather
 than an exception (an unpaired tool call is rejected outright by both vendors).
 See ADR-007.
 
+## Structured outputs
+
+`POST /v1/triage` classifies a support ticket into a
+[`TriageResult`](app/domain/triage.py) — category, severity, sentiment, next
+action, a PII flag, a confidence score and a one-line summary:
+
+```bash
+curl -s localhost:8000/v1/triage -H 'content-type: application/json' -d '{
+  "ticket_id": "T-1",
+  "subject": "Double charge",
+  "body": "I was billed twice for order 4471."
+}'
+```
+
+```json
+{
+  "ticket_id": "T-1",
+  "result": {
+    "category": "billing",
+    "severity": "high",
+    "sentiment": "neutral",
+    "next_action": "escalate",
+    "summary": "Customer reports being billed twice for order 4471.",
+    "contains_pii": false,
+    "confidence": 0.85,
+    "reasoning": "Money moved incorrectly (a duplicate charge), so this is billing and the escalation policy fires regardless of scope or tone. Severity is high rather than critical: one order on one account, calm report, and the amount is recoverable."
+  },
+  "provider": "anthropic",
+  "model": "claude-sonnet-5",
+  "cost_usd": 0.005853
+}
+```
+
+A real response from `claude-sonnet-5`, trimmed only for width. The reasoning is
+worth reading: it is applying the playbook's rules by name — money moved, so
+escalate; one order and a calm tone, so `high` rather than `critical` — which is
+what the prefix is for.
+
+The schema is a **constraint on decoding**, not a request in the prompt followed
+by `json.loads`. Both vendors support this natively — `messages.parse()` at
+Anthropic, `chat.completions.parse()` at OpenAI — and there is deliberately **no
+fallback**: if the vendor cannot honour the schema, the endpoint raises rather
+than returning a plausible guess. A triage verdict with invented fields routes a
+real ticket to the wrong queue, which is worse than an error the caller can
+retry. See ADR-008.
+
+One visible consequence: **`/v1/triage` does not work on the default `fake`
+provider**, which returns `501`. The fake builds instances from field defaults
+and every field of `TriageResult` is required — and a fake that invented
+plausible values would satisfy any schema, which would mean no schema change
+could ever fail a test. Set `LLM_PROVIDER=anthropic` or `openai` for this
+endpoint.
+
+## Prompt caching
+
+The support playbook — category definitions, a severity rubric, PII patterns, the
+escalation policy and ten worked examples — is sent as a cacheable prefix. It is
+large on purpose and byte-identical on every request, which is the only reason
+caching does anything.
+
+This is the feature where working code proves nothing. Anthropic accepts a
+`cache_control` marker on a prefix below its per-model token floor, caches
+nothing, and reports no error — `cache_creation_input_tokens` just comes back 0.
+So the acceptance criterion is a measurement, not a review. Two identical triage
+requests against `claude-sonnet-5`:
+
+| | input | output | cache write | cache read | cost | latency |
+|---|---:|---:|---:|---:|---:|---:|
+| First (cold prefix) | 53 | 198 | 7,929 | 0 | **$0.032863** | 8.6s |
+| Second (identical) | 53 | 212 | 0 | 7,929 | **$0.005718** | 5.0s |
+
+**83% cheaper and 42% faster**, for an identical verdict. Isolating the prompt
+half of the bill, $0.029889 → $0.002538 — a 91.5% drop, as the 1.25× write
+premium gives way to the 0.1× read rate. The rest is output tokens, which are
+never discounted.
+
+Those are measured numbers, not estimates, and reproducing them is one command:
+
+```bash
+pytest -m live
+```
+
+Two details that decide whether any of this works:
+
+- **The playbook clears the floor on its own** — 6,737 tokens, counted with the
+  vendor's tokenizer rather than estimated, against the *highest* floor in
+  Anthropic's table (4,096). Sonnet 5 is not in the published table at all, so
+  sizing against the lower 2,048 would be a bet rather than a fact.
+- **The ticket never touches the prefix.** It goes in the user turn. Interpolating
+  a ticket id into the playbook "for context" would make every request write a
+  fresh cache entry instead of reading the last one — with no error, no failing
+  test, and a bill that quietly multiplies. `tests/test_triage.py` asserts that
+  two different tickets produce a byte-identical prefix.
+
 ## Cost accounting
 
 Every request emits one structured log line with its token usage and cost, and
@@ -189,20 +283,43 @@ through the adapters — a cost number is only as trustworthy as the table behin
 `cache_hit_rate` is the metric worth watching. Prompt caching is configured with
 a flag but *proven* only by a nonzero cache read on a repeated request; a hit rate
 of zero means the feature is doing nothing regardless of what the config says.
+After a burst of tickets it reads **0.99** — nearly every prompt token served
+from cache, because the playbook dwarfs the ticket:
+
+```json
+{
+  "requests": 3,
+  "total_cost_usd": 0.0127164,
+  "total_input_tokens": 113,
+  "total_output_tokens": 508,
+  "total_cache_read_tokens": 15858,
+  "cache_hit_rate": 0.9929246759752051,
+  "by_model": { "claude-sonnet-5": 0.0127164 }
+}
+```
 
 ## Testing
 
 ```bash
-pytest                          # full suite — no credentials, no network, no spend
+pytest                          # default suite — no credentials, no network, no spend
+pytest -m live                  # acceptance against a real vendor — costs money
 ruff check . && ruff format --check .
 ```
 
-The suite runs against `FakeProvider`, a first-class implementation of the
-provider seam rather than a mock. That is why CI needs no secrets and works on a
-fork.
+The default suite runs against `FakeProvider`, a first-class implementation of
+the provider seam rather than a mock. That is why CI needs no secrets and works
+on a fork.
 
-Tests that hit a real vendor are marked `live` and excluded by default —
-they cost money.
+Tests that hit a real vendor are marked `live` and deselected in
+`pyproject.toml` rather than left to the caller to remember: the moment a bare
+`pytest` can spend money, someone runs it in a loop.
+
+They are not optional extras, though. Prompt caching cannot be tested any other
+way — the API accepts a `cache_control` marker on a prefix that is too short,
+caches nothing, and reports no error, so passing tests and a correct-looking
+request prove nothing. `tests/test_caching_live.py` is the acceptance criterion
+for that feature: it counts the prefix with the vendor's own tokenizer and
+asserts a nonzero cache read on a repeated request.
 
 ## Project Structure
 
@@ -231,7 +348,7 @@ Each phase has an implementation-ready plan in [`docs/plans/`](docs/plans/README
 - [x] **Phase 0 — Infrastructure & contracts**: provider seam, domain model, ADRs, CI
 - [x] **[Phase 1 — Provider seam & streaming](docs/plans/phase-1-provider-seam.md)**: both real adapters, SSE, per-request cost log
 - [x] **[Phase 2 — Tool calling](docs/plans/phase-2-tool-calling.md)**: the tool loop, normalized across vendors
-- [ ] **[Phase 3 — Structured outputs & caching](docs/plans/phase-3-structured-and-caching.md)**: `/v1/triage`, prompt caching proven by measurement
+- [x] **[Phase 3 — Structured outputs & caching](docs/plans/phase-3-structured-and-caching.md)**: `/v1/triage`, prompt caching proven by measurement
 - [ ] **[Phase 4 — Evaluation](docs/plans/phase-4-evals.md)**: which provider to actually pay for — cost, latency and accuracy on a golden dataset
 - [ ] **[Phase 5 — Prompt engineering & optimization](docs/plans/phase-5-prompt-optimization.md)**: which prompt to ship — versioned playbook variants, A/B'd on the golden set, with LLM-as-judge for the free-text fields
 - [ ] **[Phase 6 — Web console](docs/plans/phase-6-web-console.md)**: a minimal React client that makes streaming, tool calls and per-request cost visible without a terminal
@@ -249,6 +366,17 @@ calling in both adapters, and `tool_call` SSE frames. The part the fake could
 never prove — whether a real model *chooses* the right tool — was checked
 against the live API: a duplicate-charge ticket produces a `search_kb` call and
 an answer grounded in what it returned.
+
+**Phase 3 — done.** `POST /v1/triage` with schema-constrained decoding in both
+adapters, the playbook grown from a stub into a 6,737-token prefix, and caching
+proven by measurement rather than by inspection: 83% cheaper on a repeated
+ticket, verified against the live Anthropic API and encoded as
+`tests/test_caching_live.py` so it stays proven.
+
+One honest gap: there is no OpenAI key on the machine this was built on, so
+`OpenAIProvider.parse()` is covered by tests against a stubbed SDK — including
+the two exception types that `except openai.APIError` does not catch — but has
+not made a real call. The Anthropic half is verified end to end.
 
 ## License
 

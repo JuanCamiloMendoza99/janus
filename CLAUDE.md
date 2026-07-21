@@ -55,16 +55,27 @@ dead code, no placeholder hacks left behind.
   adapters and `tool_call` SSE frames. Adds ADR-007 (tool-turn shape) and
   `TOOL_LOOP_MAX_ITERATIONS`. Live acceptance run passed: a real model picks
   `search_kb` and answers from what it returned.
-- ⬜ Phase 3 — Structured outputs & caching: `docs/plans/phase-3-structured-and-caching.md`
+- ✅ **Phase 3 — Structured outputs & caching** (done 2026-07-21):
+  `docs/plans/phase-3-structured-and-caching.md`. `POST /v1/triage` with
+  schema-constrained decoding in both adapters, the playbook expanded from a stub
+  into a real 6,737-token prefix, and caching **proven by measurement** against
+  the live API (a repeated ticket costs 83% less) — see ADR-003's Phase 3
+  addendum. Adds ADR-008, `app/api/errors.py`, `app/services/triage.py`,
+  `tests/test_triage.py` and `tests/test_caching_live.py`. 85 tests green on the
+  fake, 5 more behind `-m live`, ruff clean.
 - ⬜ Phase 4 — Evaluation: `docs/plans/phase-4-evals.md`
 - ⬜ Phase 5 — Prompt engineering & optimization: `docs/plans/phase-5-prompt-optimization.md`
   (versioned playbook variants behind a prompt registry, A/B'd on Phase 4's golden
-  set, with LLM-as-judge for the free-text fields; introduces ADR-008)
+  set, with LLM-as-judge for the free-text fields; introduces ADR-009)
 - ✅ **OpenAI model id resolved.** `OPENAI_MODEL` now defaults to `gpt-5.6-terra`
   (mid tier), with the id and rates verified against OpenAI's pricing page on
   2026-07-20 rather than carried from memory. The `.env.example` placeholder is
-  gone; the adapter itself remains unverified against the live API, because no
-  `OPENAI_API_KEY` is configured on this machine.
+  gone; the adapter itself is still unverified against the live API (see below).
+- ⚠️ **No `OPENAI_API_KEY` is configured on this machine.** Phase 3's live
+  acceptance ran against `anthropic` only. `OpenAIProvider.parse()` is covered by
+  stubbed-SDK tests — including the two `OpenAIError` subclasses that
+  `except openai.APIError` does not catch — but has never made a real call.
+  Treat the OpenAI half of "works on both providers" as unverified.
 
 *(Update this section whenever a phase or pending item changes.)*
 
@@ -91,11 +102,18 @@ All are documented as ADRs; all are the kind of bug that ships silently.
    `UsageReport` late on purpose, and `tests/test_provider_seam.py` asserts that
    ordering so an early flush fails a test.
 2. **Prompt caching below the token floor is a no-op** (ADR-003). ~4096 tokens on
-   Opus 4.8, ~2048 on the Sonnet family. The API accepts the marker and caches
-   nothing — no error. The only acceptance criterion is
-   `cache_read_tokens > 0` on a second identical request. Measured 2026-07-21:
-   the prefix (tool schemas + playbook) is **2117 tokens, 69 above the Sonnet
-   floor**. Anything that shrinks it turns caching off silently.
+   the Opus 4.x family and Haiku 4.5, ~2048 on Sonnet 4.6 and Fable 5 — and
+   Sonnet 5, the default, is not in the published table at all, so assuming the
+   lower number is a bet. The API accepts the marker and caches nothing — no
+   error. The only acceptance criterion is `cache_read_tokens > 0` on a second
+   identical request, which is what `tests/test_caching_live.py` asserts.
+   Phase 3 sized the playbook to clear the *high* floor on its own: measured
+   2026-07-21 at **6,737 tokens**, cached and read back live. The prefix on the
+   wire is **7,929** — the extra ~1,190 is the `TriageResult` JSON schema, which
+   `output_config.format` renders ahead of the messages and which therefore
+   caches too. Note the two endpoints do **not** share a cache entry: `tools`
+   renders before `system` and `/v1/triage` sends none, so the playbook cannot
+   borrow the tool schemas' tokens the way `/v1/chat` does.
 3. **An unpaired tool call poisons the next request, not the current one**
    (ADR-007). Drop a `ToolResult` — by letting a handler's exception escape, or
    by discarding a call whose arguments would not parse — and the turn looks
@@ -109,11 +127,12 @@ All are documented as ADRs; all are the kind of bug that ships silently.
 app/main.py            FastAPI entrypoint + /health
 app/core/config.py     Settings (env-driven); add new settings here, never hardcode
 app/core/pricing.py    Dated $/MTok table — the basis of every cost figure
-app/api/               Routers, one module per endpoint + schemas.py
+app/api/               Routers, one module per endpoint + schemas.py + errors.py
 app/providers/base.py  THE SEAM: domain model + LLMProvider Protocol
 app/providers/         Adapters: anthropic.py, openai.py, fake.py, registry.py
 app/domain/            TriageResult + prompts/playbook.md (the cacheable prefix)
 app/services/          Prompt assembly + the tool loop (what the routers delegate to)
+                       chat.py (the loop) and triage.py (the constrained call)
 app/tools/             Tool specs, handlers, dispatch, the KB corpus
 app/observability/     ledger.py (per-request usage), middleware.py (cost log)
 tests/                 Pytest — runs entirely on the fake provider
@@ -128,8 +147,8 @@ pip install -e ".[dev]"                 # local dev install (Python 3.12)
 uvicorn app.main:app --reload           # API on :8000, docs on /docs
 curl localhost:8000/health              # reports the active provider and model
 
-pytest                                  # full suite, no credentials needed
-pytest -m "not live"                    # explicit: skip anything that spends money
+pytest                                  # default suite, no credentials needed
+pytest -m live                          # acceptance against a real vendor — spends money
 ruff check . && ruff format --check .
 ```
 
