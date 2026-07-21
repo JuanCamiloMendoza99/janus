@@ -21,6 +21,7 @@ from collections.abc import AsyncIterator, Sequence
 
 from pydantic import BaseModel
 
+from app.observability.ledger import current_ledger
 from app.providers.base import (
     Completion,
     Done,
@@ -73,6 +74,18 @@ class FakeProvider:
             output_tokens=self._estimate_tokens(reply),
         )
 
+    def _record(self, usage: Usage) -> None:
+        """Record to the request ledger if one is installed.
+
+        The fake is a first-class implementation of the seam, so it accounts for
+        its (free) usage exactly like the real adapters — this is what keeps the
+        whole cost path exercised in CI. `current_ledger()` is `None` when a test
+        calls the provider directly, and that must be tolerated (ADR-004).
+        """
+        ledger = current_ledger()
+        if ledger is not None:
+            ledger.record(self.name, usage)
+
     # -- protocol ---------------------------------------------------------
 
     async def stream(
@@ -84,12 +97,16 @@ class FakeProvider:
 
         The event order mirrors what real providers do — usage last — so tests
         written against the fake catch the flush-after-close bug described in
-        ADR-004 instead of hiding it.
+        ADR-004 instead of hiding it. Usage is recorded to the ledger at the same
+        late point a real adapter would, so a middleware that flushed early would
+        see an empty ledger.
         """
         reply = self._reply(prompt)
         for word in reply.split():
             yield TextDelta(text=word + " ")
-        yield UsageReport(usage=self._usage(prompt, reply))
+        usage = self._usage(prompt, reply)
+        self._record(usage)
+        yield UsageReport(usage=usage)
         yield Done(stop_reason="end_turn")
 
     async def complete(
@@ -98,10 +115,12 @@ class FakeProvider:
         tools: Sequence[ToolSpec] = (),
     ) -> Completion:
         reply = self._reply(prompt)
+        usage = self._usage(prompt, reply)
+        self._record(usage)
         return Completion(
             text=reply,
             tool_calls=(),
-            usage=self._usage(prompt, reply),
+            usage=usage,
             stop_reason="end_turn",
         )
 

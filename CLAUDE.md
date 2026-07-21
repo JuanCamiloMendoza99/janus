@@ -46,19 +46,27 @@ dead code, no placeholder hacks left behind.
 - ✅ **Phase 0 — Infrastructure & contracts** (done 2026-07-20): repo scaffold,
   the `LLMProvider` seam and vendor-neutral domain model, working `FakeProvider`,
   `/health`, ADR-001..006, phase plans, CI. 11 tests green, ruff clean.
-- ⬜ **Phase 1 — Provider seam & streaming** ← next up:
-  `docs/plans/phase-1-provider-seam.md`. Delivers both real adapters, SSE and the
-  cost ledger. **Completing it satisfies the original brief** (swap provider by
-  env var; cost logged per request).
+- 🚧 **Phase 1 — Provider seam & streaming** (implemented 2026-07-20; live
+  acceptance pending): `docs/plans/phase-1-provider-seam.md`. Both real adapters,
+  SSE on `/v1/chat`, the per-request cost ledger and `/v1/usage` are in; 24 tests
+  green on the fake, ruff clean. Defaults are the mid tier of each vendor —
+  `claude-sonnet-5` and `gpt-5.6-terra` — ids/rates verified 2026-07-20.
+  **Completing the brief still needs the live acceptance test** (same curl against
+  `anthropic`/`openai`, real tokens, non-zero cost) — not yet run.
 - ⬜ Phase 2 — Tool calling: `docs/plans/phase-2-tool-calling.md`
 - ⬜ Phase 3 — Structured outputs & caching: `docs/plans/phase-3-structured-and-caching.md`
 - ⬜ Phase 4 — Evaluation: `docs/plans/phase-4-evals.md`
-- ⚠️ **No real LLM call has been made yet.** Everything to date runs on
-  `FakeProvider`. Treat any claim about provider behaviour as unverified until
-  Phase 1 exercises it against a live API.
-- ⚠️ **The OpenAI model id in `.env.example` is a placeholder.** Verify the
-  current published id before implementing the OpenAI adapter; do not carry one
-  over from memory.
+- ⬜ Phase 5 — Prompt engineering & optimization: `docs/plans/phase-5-prompt-optimization.md`
+  (versioned playbook variants behind a prompt registry, A/B'd on Phase 4's golden
+  set, with LLM-as-judge for the free-text fields; introduces ADR-007)
+- ⚠️ **No real LLM call has been made yet.** The adapters are written but
+  everything exercised so far runs on `FakeProvider`. Treat any claim about live
+  provider behaviour (streaming shape, usage fields, caching, error mapping) as
+  unverified until the live acceptance test is run against a real API.
+- ✅ **OpenAI model id resolved.** `OPENAI_MODEL` now defaults to `gpt-5.6-terra`
+  (mid tier), with the id and rates verified against OpenAI's pricing page on
+  2026-07-20 rather than carried from memory. The `.env.example` placeholder is
+  gone; the adapter itself is still unverified against the live API (see above).
 
 *(Update this section whenever a phase or pending item changes.)*
 

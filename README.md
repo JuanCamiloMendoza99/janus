@@ -185,16 +185,25 @@ module, and every other design decision follows from it.
 Each phase has an implementation-ready plan in [`docs/plans/`](docs/plans/README.md).
 
 - [x] **Phase 0 — Infrastructure & contracts**: provider seam, domain model, ADRs, CI
-- [ ] **[Phase 1 — Provider seam & streaming](docs/plans/phase-1-provider-seam.md)**: both real adapters, SSE, per-request cost log
+- [ ] **[Phase 1 — Provider seam & streaming](docs/plans/phase-1-provider-seam.md)**: both real adapters, SSE, per-request cost log *(implemented; live acceptance against real vendors pending)*
 - [ ] **[Phase 2 — Tool calling](docs/plans/phase-2-tool-calling.md)**: the tool loop, normalized across vendors
 - [ ] **[Phase 3 — Structured outputs & caching](docs/plans/phase-3-structured-and-caching.md)**: `/v1/triage`, prompt caching proven by measurement
 - [ ] **[Phase 4 — Evaluation](docs/plans/phase-4-evals.md)**: which provider to actually pay for — cost, latency and accuracy on a golden dataset
+- [ ] **[Phase 5 — Prompt engineering & optimization](docs/plans/phase-5-prompt-optimization.md)**: which prompt to ship — versioned playbook variants, A/B'd on the golden set, with LLM-as-judge for the free-text fields
 
 ## Current status
 
-**Phase 0.** The scaffold, the contracts and the decisions are in place; the app
-boots, `/health` works and CI is green. **No real LLM call has been made yet** —
-that is Phase 1, and it is where the interesting failures live.
+**Phase 1 — implemented, live acceptance pending.** Both real adapters (Anthropic
+and OpenAI), SSE streaming on `/v1/chat`, the per-request cost ledger and
+`/v1/usage` are in place; the full suite is green on the `FakeProvider` and ruff
+is clean. The defaults are each vendor's mid tier — `claude-sonnet-5` and
+`gpt-5.6-terra` — with model ids and rates verified against the vendors' pricing
+pages on 2026-07-20.
+
+**Still unproven against a live API.** Everything to date runs on the fake. The
+phase's acceptance test — the same `curl` against `LLM_PROVIDER=anthropic` and
+`openai` returning real tokens and a **non-zero** cost — needs credentials and a
+little spend, and has not been run yet.
 
 ## License
 

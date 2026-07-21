@@ -43,9 +43,10 @@ class Settings(BaseSettings):
 
     # --- Models ------------------------------------------------------------
     # Kept separate from `llm_provider` so cost/quality tier can be changed
-    # without touching the provider seam.
-    anthropic_model: str = "claude-opus-4-8"
-    openai_model: str = "gpt-5"
+    # without touching the provider seam. Defaults are the mid tier of each
+    # vendor (Sonnet 5 / gpt-5.6-terra), verified against the pricing table.
+    anthropic_model: str = "claude-sonnet-5"
+    openai_model: str = "gpt-5.6-terra"
 
     # --- Generation --------------------------------------------------------
     max_output_tokens: int = 4096
