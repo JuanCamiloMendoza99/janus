@@ -76,6 +76,31 @@ def test_streamed_cost_is_non_zero(client: TestClient) -> None:
     assert usage["by_model"].get("claude-sonnet-5", 0) > 0
 
 
+def test_the_usage_frame_explains_its_own_cost(client: TestClient) -> None:
+    """Every token count that feeds `cost_usd` is in the frame.
+
+    Without `cache_write_tokens` the frame is unreconcilable: writing the cache
+    is billed at 1.25x input on Anthropic and dominates the first call of a
+    request, so a client sees a handful of tokens and a cost that cannot follow
+    from them. Measured on a live Sonnet 5 request, 173 visible tokens carried
+    $0.0095 of cost, 83% of it invisible.
+    """
+    response = client.post(
+        "/v1/chat",
+        json={"messages": [{"role": "user", "content": "hello"}]},
+    )
+
+    usage = next(data for name, data in _parse_sse(response.text) if name == "usage")
+
+    assert set(usage) == {
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "cost_usd",
+    }
+
+
 def test_chat_emits_a_tool_call_frame_before_the_answer() -> None:
     """The client is shown what the assistant is doing during a tool turn.
 

@@ -63,6 +63,13 @@ def _frame(event: StreamEvent) -> dict[str, str]:
                 cache_read_tokens=usage.cache_read_tokens,
                 cache_write_tokens=usage.cache_write_tokens,
             )
+            # All four token counts are reported, not just the two obvious ones,
+            # so `cost_usd` is reconcilable from the frame itself. Writing the
+            # cache is billed at a premium (1.25x input on Anthropic) and can
+            # dominate the cost of the first call in a request: measured on a
+            # real Sonnet 5 request, 84 input + 89 output tokens came to
+            # $0.0095, of which $0.0079 was 2117 cache-write tokens. Omitting
+            # that field leaves a client unable to explain its own bill.
             return {
                 "event": "usage",
                 "data": json.dumps(
@@ -70,6 +77,7 @@ def _frame(event: StreamEvent) -> dict[str, str]:
                         "input_tokens": usage.input_tokens,
                         "output_tokens": usage.output_tokens,
                         "cache_read_tokens": usage.cache_read_tokens,
+                        "cache_write_tokens": usage.cache_write_tokens,
                         "cost_usd": cost,
                     }
                 ),
@@ -130,7 +138,9 @@ async def chat(
 
         event: delta      data: {"text": "..."}
         event: tool_call  data: {"id": "...", "name": "...", "arguments": {...}}
-        event: usage      data: {"input_tokens": N, "output_tokens": N, "cost_usd": N}
+        event: usage      data: {"input_tokens": N, "output_tokens": N,
+                                 "cache_read_tokens": N, "cache_write_tokens": N,
+                                 "cost_usd": N}
         event: done       data: {"stop_reason": "end_turn"}
 
     With `use_tools` (the default) the stream is a whole exchange, not a single
