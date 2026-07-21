@@ -18,6 +18,7 @@ add any new ADRs to [`../architecture.md`](../architecture.md), and update the
 | [3 — Structured outputs & caching](phase-3-structured-and-caching.md) | `/v1/triage`, proven prompt caching | ⬜ |
 | [4 — Evaluation](phase-4-evals.md) | Provider comparison: cost, latency, accuracy | ⬜ |
 | [5 — Prompt engineering & optimization](phase-5-prompt-optimization.md) | Versioned prompt variants, A/B on the golden set, LLM-as-judge | ⬜ |
+| [6 — Web console](phase-6-web-console.md) | A minimal React client that makes streaming, tool calls and cost visible | ⬜ |
 
 **Phase 1 is the one that satisfies the original brief**: after it, the provider
 changes with an environment variable and every request logs its cost. Phases 2–5
@@ -26,3 +27,8 @@ build on that spine.
 **Phases 4 and 5 are the two axes of the same question.** Phase 4 asks which
 provider and model to pay for; Phase 5 asks which prompt to ship. They share one
 harness and one golden dataset.
+
+**Phase 6 is last because it should show everything.** It depends only on the
+endpoints, which are complete after Phase 3 — Phases 4 and 5 produce documents
+rather than API surface — so it can be pulled forward if a visual demo is worth
+more than covering the whole system in one pass.
