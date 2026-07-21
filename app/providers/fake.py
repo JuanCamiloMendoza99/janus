@@ -29,6 +29,8 @@ from app.providers.base import (
     Prompt,
     StreamEvent,
     TextDelta,
+    ToolCall,
+    ToolCallRequested,
     ToolSpec,
     Usage,
     UsageReport,
@@ -42,12 +44,32 @@ _TOKENS_PER_WORD = 1
 
 
 class FakeProvider:
-    """Echoes a deterministic response derived from the prompt."""
+    """Echoes a deterministic response derived from the prompt.
+
+    Optionally scripted: `tool_script` is one sequence of `ToolCall`s per turn.
+    Turn *i* requests exactly what `tool_script[i]` says and stops with
+    `tool_use`; once the script runs out the provider answers with its usual
+    echo. That is enough to drive the whole tool loop — parallel calls, failing
+    calls, and (with a script longer than the cap) a model that never stops
+    asking — with no credentials and no network.
+
+    Scripting the *calls* rather than the outcomes is the point: the tools
+    themselves, `dispatch()`, the result rendering and the loop's termination
+    are all the real implementations under test.
+    """
 
     name = "fake"
 
-    def __init__(self, model: str = FAKE_MODEL) -> None:
+    def __init__(
+        self,
+        model: str = FAKE_MODEL,
+        tool_script: Sequence[Sequence[ToolCall]] = (),
+    ) -> None:
         self.model = model
+        self._tool_script = tuple(tuple(turn) for turn in tool_script)
+        #: Turns taken so far. Instance state, so a test gets a fresh script by
+        #: constructing a fresh provider.
+        self._turn = 0
 
     # -- helpers ----------------------------------------------------------
 
@@ -55,18 +77,41 @@ class FakeProvider:
     def _estimate_tokens(text: str | None) -> int:
         return len(text.split()) * _TOKENS_PER_WORD if text else 0
 
+    def _next_tool_calls(self) -> tuple[ToolCall, ...]:
+        """Return the calls scripted for this turn and advance the counter."""
+        turn = self._turn
+        self._turn += 1
+        return self._tool_script[turn] if turn < len(self._tool_script) else ()
+
     def _reply(self, prompt: Prompt) -> str:
         last_user = next(
             (m.content for m in reversed(prompt.messages) if m.role == "user"),
             "",
         )
-        return f"[fake:{self.model}] {last_user}"
+        # Echoing the tool results back makes it visible, in the response body,
+        # that results actually reached the model — including the errored ones,
+        # which is the recovery path worth being able to see.
+        results = [
+            result
+            for message in prompt.messages
+            if message.role == "tool"
+            for result in message.tool_results
+        ]
+        suffix = "".join(
+            f" | tool{'!' if result.is_error else ''}: {result.content}" for result in results
+        )
+        return f"[fake:{self.model}] {last_user}{suffix}"
 
     def _usage(self, prompt: Prompt, reply: str) -> Usage:
         prompt_tokens = (
             self._estimate_tokens(prompt.cacheable_prefix)
             + self._estimate_tokens(prompt.system)
             + sum(self._estimate_tokens(m.content) for m in prompt.messages)
+            + sum(
+                self._estimate_tokens(result.content)
+                for m in prompt.messages
+                for result in m.tool_results
+            )
         )
         return Usage(
             model=self.model,
@@ -100,7 +145,21 @@ class FakeProvider:
         ADR-004 instead of hiding it. Usage is recorded to the ledger at the same
         late point a real adapter would, so a middleware that flushed early would
         see an empty ledger.
+
+        A scripted turn emits its tool calls instead of text and stops with
+        `tool_use`. Usage still comes last: an intermediate turn of the tool loop
+        costs money too, and the ledger has to see it.
         """
+        calls = self._next_tool_calls()
+        if calls:
+            for call in calls:
+                yield ToolCallRequested(call=call)
+            usage = self._usage(prompt, "")
+            self._record(usage)
+            yield UsageReport(usage=usage)
+            yield Done(stop_reason="tool_use")
+            return
+
         reply = self._reply(prompt)
         for word in reply.split():
             yield TextDelta(text=word + " ")
@@ -114,14 +173,15 @@ class FakeProvider:
         prompt: Prompt,
         tools: Sequence[ToolSpec] = (),
     ) -> Completion:
-        reply = self._reply(prompt)
+        calls = self._next_tool_calls()
+        reply = "" if calls else self._reply(prompt)
         usage = self._usage(prompt, reply)
         self._record(usage)
         return Completion(
             text=reply,
-            tool_calls=(),
+            tool_calls=calls,
             usage=usage,
-            stop_reason="end_turn",
+            stop_reason="tool_use" if calls else "end_turn",
         )
 
     async def parse[T: BaseModel](

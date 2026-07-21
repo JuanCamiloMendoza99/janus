@@ -97,6 +97,34 @@ is decorative. **The acceptance test for caching is
 runs, not that the marker was accepted. `GET /v1/usage` exposes `cache_hit_rate`
 for exactly this reason.
 
+**Phase 2 measurement (2026-07-21).** Caching is already engaging, earlier than
+planned, and the margin is alarming. A live `claude-sonnet-5` request through the
+tool loop reported `cache_write_tokens=2117` on its first model call and
+`cache_read_tokens=2117` on its second — the prefix is paid for once per request
+even before Phase 3 expands it.
+
+The 2117 tokens are **the tool definitions plus the playbook**, not the playbook
+alone: the `cache_control` marker sits on the system block and Anthropic renders
+`tools` → `system` → `messages`, so the tool schemas fall inside the cached
+prefix. That is the only reason a stub playbook clears the bar at all.
+
+The Sonnet floor is ~2048. **The prefix clears it by 69 tokens.** Removing a
+tool, shortening a description or trimming the playbook drops it below the floor
+and caching stops silently — no error, `cache_creation_input_tokens` simply
+returns 0. Phase 3 must put the playbook comfortably above the floor on its own
+merits and assert it, rather than leaving the feature resting on a 3% margin
+supplied by tool schemas that Phase 2 happened to add.
+
+Two further consequences already visible:
+
+* **Cache writes dominate the first call.** That same call was 84 input + 89
+  output tokens and cost $0.0095, of which $0.0079 was the cache write (billed at
+  1.25x input). A usage report omitting `cache_write_tokens` is therefore not
+  reconcilable, which is why the `usage` SSE frame carries all four counts.
+* **A tool-using request is where caching pays off fastest.** Every iteration of
+  the loop re-sends the same prefix, so the write is amortized within a single
+  request rather than across requests.
+
 ---
 
 ## ADR-004 — Cost accounting lives in a request-scoped ledger, not in the middleware
@@ -198,3 +226,78 @@ tier — `ANTHROPIC_MODEL=claude-sonnet-5`, `OPENAI_MODEL=gpt-5.6-terra` — wit
 OpenAI id verified against the published model list (the `gpt-5` placeholder is
 gone). The Anthropic adapter also takes `prompt_caching_enabled` from settings at
 construction, keeping the settings read in the registry.
+
+---
+
+## ADR-007 — A tool turn is one message in the domain, N at the OpenAI edge
+
+**Status:** accepted (Phase 2)
+
+**Context.** The tool loop has to replay what happened back to the model: the
+assistant turn that requested the calls, and the results of those calls. The
+domain `Message` was `role` + `content: str` and could express neither. Worse,
+the two vendors disagree about the shape at every level:
+
+| | Anthropic | OpenAI |
+|---|---|---|
+| A tool call | A `tool_use` content block on the assistant message | A `tool_calls` array, arguments as a JSON **string** |
+| A tool result | A `tool_result` block inside a **user** message | A message with `role: "tool"` and a `tool_call_id` |
+| Results per turn | All of them in one message | Exactly one per message |
+| Marking a failure | A native `is_error` field | No such field |
+| Streamed arguments | `input_json_delta` fragments, per content block index | `tool_calls` delta fragments, per call index, no per-call terminator |
+| Argument schema | `input_schema` | `function.parameters` |
+
+Following ADR-001, none of that may leak upward. The question was which of the
+two shapes the domain should adopt.
+
+**Decision.** `Message` gains `tool_calls` (on an `assistant` turn) and
+`tool_results` (on a `tool` turn), and **every result of a turn lives in a single
+`tool` message**. The OpenAI adapter fans that one message out into N; the
+Anthropic adapter renders it as a user message of `tool_result` blocks. Both
+adapters reassemble streamed argument fragments internally and emit
+`ToolCallRequested` only once a call's arguments are complete and parsed.
+
+Choosing the one-message shape is not just a coin flip toward Anthropic's native
+form. **Splitting results across several messages teaches the model that its
+parallel calls were answered one at a time, and it stops making them.** The
+domain shape is the one that preserves the behaviour we want; the vendor that
+disagrees pays for it inside its own adapter.
+
+Two supporting rules:
+
+* **`dispatch()` never raises for a tool-level failure.** An unknown tool,
+  arguments that fail schema validation, and a handler that throws all return
+  `ToolResult(is_error=True)` with a message the model can read. Letting the
+  exception escape drops the result, which leaves the model's tool call unpaired
+  — and both vendors reject the *next* request outright when a call has no
+  matching result. The failure mode of "just raise" is a 500, not a worse answer.
+* **The loop is capped** (`TOOL_LOOP_MAX_ITERATIONS`, default 5) and terminates
+  with `Done(stop_reason="error")` rather than an exception. Every iteration is a
+  paid model call; a model that keeps asking for the same tool would otherwise
+  spend the budget one call at a time with nothing to stop it.
+
+The loop drives `stream()`, not `complete()`, on every iteration — tools are on
+by default, and a `complete()`-based loop would quietly turn the streaming
+endpoint into a blocking one for most requests.
+
+**Consequences.** `Message` is no longer a trivially simple record, and every
+adapter now needs a `_render_message` that handles three cases instead of one.
+That is the cost of ADR-001 being honoured rather than worked around: the
+alternative was an `if provider == "openai"` in the loop.
+
+Because OpenAI has no `is_error`, a failed result is marked by prefixing its
+content with `ERROR: ` — the one place a vendor gap is papered over rather than
+modelled, and it is a lossy translation. If a future vendor needs something
+richer, it goes in `ToolResult`, not in the loop.
+
+The trap worth writing down: **an unpaired tool call poisons the whole
+conversation, not just the turn it came from.** It fails on the *following*
+request, with a vendor error about a tool_use block having no tool_result — far
+from the code that dropped it. That is why `dispatch()` returns errors as data
+and why an argument string that will not parse still becomes a `ToolCall` with
+empty arguments instead of being discarded.
+
+Tool arguments are validated against a Pydantic model, and `ToolSpec.parameters`
+is *derived* from that same model (`app/tools/schema.py`). A hand-written schema
+next to a hand-written handler drifts, and the drift is invisible until a live
+model finds it.

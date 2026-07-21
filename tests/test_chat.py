@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import Settings, get_settings
 from app.main import app
+from app.providers.base import ToolCall
 from app.providers.fake import FakeProvider
 from app.providers.registry import get_provider
 
@@ -73,6 +74,65 @@ def test_streamed_cost_is_non_zero(client: TestClient) -> None:
     assert usage["total_cost_usd"] > 0
     assert usage["requests"] >= 1
     assert usage["by_model"].get("claude-sonnet-5", 0) > 0
+
+
+def test_the_usage_frame_explains_its_own_cost(client: TestClient) -> None:
+    """Every token count that feeds `cost_usd` is in the frame.
+
+    Without `cache_write_tokens` the frame is unreconcilable: writing the cache
+    is billed at 1.25x input on Anthropic and dominates the first call of a
+    request, so a client sees a handful of tokens and a cost that cannot follow
+    from them. Measured on a live Sonnet 5 request, 173 visible tokens carried
+    $0.0095 of cost, 83% of it invisible.
+    """
+    response = client.post(
+        "/v1/chat",
+        json={"messages": [{"role": "user", "content": "hello"}]},
+    )
+
+    usage = next(data for name, data in _parse_sse(response.text) if name == "usage")
+
+    assert set(usage) == {
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "cost_usd",
+    }
+
+
+def test_chat_emits_a_tool_call_frame_before_the_answer() -> None:
+    """The client is shown what the assistant is doing during a tool turn.
+
+    Without this frame the stream simply stops for the duration of the tool
+    call, which is indistinguishable from a hung request.
+    """
+    provider = FakeProvider(
+        tool_script=[[ToolCall(id="call-1", name="search_kb", arguments={"query": "refund"})]]
+    )
+    app.dependency_overrides[get_settings] = lambda: Settings(llm_provider="fake", environment="ci")
+    app.dependency_overrides[get_provider] = lambda: provider
+    try:
+        with TestClient(app) as test_client:
+            response = test_client.post(
+                "/v1/chat",
+                json={"messages": [{"role": "user", "content": "I want a refund"}]},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    events = _parse_sse(response.text)
+    names = [name for name, _ in events]
+
+    assert names.index("tool_call") < names.index("delta")
+    assert names[-1] == "done"
+    # One usage frame per model call: the tool turn and the answer.
+    assert names.count("usage") == 2
+
+    tool_frame = next(data for name, data in events if name == "tool_call")
+    assert tool_frame["name"] == "search_kb"
+    assert tool_frame["arguments"] == {"query": "refund"}
 
 
 def test_usage_totals_match_the_recorded_request(client: TestClient) -> None:

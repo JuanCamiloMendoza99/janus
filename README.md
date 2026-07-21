@@ -136,6 +136,49 @@ LLM_PROVIDER=openai    uvicorn app.main:app
 Same requests, same responses, same client. `/health` reports which vendor
 answered. No application code differs between the three.
 
+## Tool calling
+
+`POST /v1/chat` runs a real tool loop: call the model, run whatever tools it
+asked for, hand back every result, ask again — until it answers or hits
+`TOOL_LOOP_MAX_ITERATIONS` (default 5, because every iteration is a paid model
+call).
+
+| Tool | Kind | What it does |
+|---|---|---|
+| `search_kb` | read | Keyword search over a small in-repo corpus of support articles. Deliberately not a vector index — the sibling [Veridex](https://github.com/JuanCamiloMendoza99/veridex) project covers retrieval, and a second worse RAG system here would add nothing |
+| `escalate_ticket` | write | Records an escalation and confirms it. Idempotent by ticket id: a model that repeats itself does not page a second human |
+
+One read tool and one write tool on purpose — they exercise different halves of
+the loop. A read tool tolerates a speculative call; a write tool does not.
+
+The stream reflects the whole exchange rather than a single call:
+
+```
+event: tool_call  data: {"id":"...","name":"search_kb","arguments":{"query":"..."}}
+event: usage      data: {"input_tokens":84,"output_tokens":89,"cache_read_tokens":0,
+                         "cache_write_tokens":2117,"cost_usd":0.00952575}
+event: delta      data: {"text":"..."}
+event: usage      data: {"input_tokens":537,"output_tokens":1422,"cache_read_tokens":2117,
+                         "cache_write_tokens":0,"cost_usd":0.0235761}
+event: done       data: {"stop_reason":"end_turn"}
+```
+
+Those are real numbers from a `claude-sonnet-5` run, and they show three things
+at once. `tool_call` frames are emitted as each call is assembled, so a client
+can show what the assistant is doing instead of freezing for the length of a tool
+turn. **Each model call reports its own `usage`** — a tool-using request costs
+several, and hiding that would make the cost figure a lie. And all four token
+counts are present, so `cost_usd` is reconcilable from the frame: the first
+call's cost is 83% cache-write, which a frame reporting only input and output
+tokens would leave unexplainable. Set `use_tools:false` to disable tools for a
+single request.
+
+Two details that are easy to get wrong and are covered by tests: every result of
+a turn goes back in **one** message (splitting them trains the model out of
+parallel calls), and a tool failure comes back as a readable error result rather
+than an exception (an unpaired tool call is rejected outright by both vendors).
+See ADR-007.
+
 ## Cost accounting
 
 Every request emits one structured log line with its token usage and cost, and
@@ -170,7 +213,8 @@ app/
 ├── api/              # Routers (thin) + HTTP schemas
 ├── providers/        # base.py = the seam; anthropic / openai / fake adapters
 ├── domain/           # TriageResult + the cacheable support playbook
-├── tools/            # Tool specs, handlers and dispatch
+├── services/         # Prompt assembly + the tool loop
+├── tools/            # Tool specs, handlers, dispatch and the KB corpus
 └── observability/    # Usage ledger + cost middleware
 tests/                # Pytest — runs entirely on the fake provider
 docs/architecture.md  # ADRs (append-only)
@@ -185,25 +229,27 @@ module, and every other design decision follows from it.
 Each phase has an implementation-ready plan in [`docs/plans/`](docs/plans/README.md).
 
 - [x] **Phase 0 — Infrastructure & contracts**: provider seam, domain model, ADRs, CI
-- [ ] **[Phase 1 — Provider seam & streaming](docs/plans/phase-1-provider-seam.md)**: both real adapters, SSE, per-request cost log *(implemented; live acceptance against real vendors pending)*
-- [ ] **[Phase 2 — Tool calling](docs/plans/phase-2-tool-calling.md)**: the tool loop, normalized across vendors
+- [x] **[Phase 1 — Provider seam & streaming](docs/plans/phase-1-provider-seam.md)**: both real adapters, SSE, per-request cost log
+- [ ] **[Phase 2 — Tool calling](docs/plans/phase-2-tool-calling.md)**: the tool loop, normalized across vendors *(implemented; live acceptance against real vendors pending)*
 - [ ] **[Phase 3 — Structured outputs & caching](docs/plans/phase-3-structured-and-caching.md)**: `/v1/triage`, prompt caching proven by measurement
 - [ ] **[Phase 4 — Evaluation](docs/plans/phase-4-evals.md)**: which provider to actually pay for — cost, latency and accuracy on a golden dataset
 - [ ] **[Phase 5 — Prompt engineering & optimization](docs/plans/phase-5-prompt-optimization.md)**: which prompt to ship — versioned playbook variants, A/B'd on the golden set, with LLM-as-judge for the free-text fields
 
 ## Current status
 
-**Phase 1 — implemented, live acceptance pending.** Both real adapters (Anthropic
-and OpenAI), SSE streaming on `/v1/chat`, the per-request cost ledger and
-`/v1/usage` are in place; the full suite is green on the `FakeProvider` and ruff
-is clean. The defaults are each vendor's mid tier — `claude-sonnet-5` and
+**Phase 1 — done.** Both real adapters (Anthropic and OpenAI), SSE streaming on
+`/v1/chat`, the per-request cost ledger and `/v1/usage`, verified against both
+live APIs. The defaults are each vendor's mid tier — `claude-sonnet-5` and
 `gpt-5.6-terra` — with model ids and rates verified against the vendors' pricing
 pages on 2026-07-20.
 
-**Still unproven against a live API.** Everything to date runs on the fake. The
-phase's acceptance test — the same `curl` against `LLM_PROVIDER=anthropic` and
-`openai` returning real tokens and a **non-zero** cost — needs credentials and a
-little spend, and has not been run yet.
+**Phase 2 — implemented, live acceptance pending.** The tool loop, `search_kb`
+and `escalate_ticket`, tool calling in both adapters, and `tool_call` SSE frames
+are in place; the suite is green on the `FakeProvider` and ruff is clean. What
+the fake cannot prove is whether a real model *chooses* the right tool, so the
+phase's acceptance run — a duplicate-charge ticket against `LLM_PROVIDER=anthropic`
+and `openai`, expecting a `search_kb` call and a grounded answer — is still
+outstanding.
 
 ## License
 

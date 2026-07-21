@@ -46,23 +46,27 @@ dead code, no placeholder hacks left behind.
 - ✅ **Phase 0 — Infrastructure & contracts** (done 2026-07-20): repo scaffold,
   the `LLMProvider` seam and vendor-neutral domain model, working `FakeProvider`,
   `/health`, ADR-001..006, phase plans, CI. 11 tests green, ruff clean.
-- 🚧 **Phase 1 — Provider seam & streaming** (implemented 2026-07-20; live
-  acceptance pending): `docs/plans/phase-1-provider-seam.md`. Both real adapters,
-  SSE on `/v1/chat`, the per-request cost ledger and `/v1/usage` are in; 24 tests
-  green on the fake, ruff clean. Defaults are the mid tier of each vendor —
+- ✅ **Phase 1 — Provider seam & streaming** (done 2026-07-21): both real
+  adapters, SSE on `/v1/chat`, the per-request cost ledger and `/v1/usage`,
+  verified live against both vendors. Defaults are the mid tier of each vendor —
   `claude-sonnet-5` and `gpt-5.6-terra` — ids/rates verified 2026-07-20.
-  **Completing the brief still needs the live acceptance test** (same curl against
-  `anthropic`/`openai`, real tokens, non-zero cost) — not yet run.
-- ⬜ Phase 2 — Tool calling: `docs/plans/phase-2-tool-calling.md`
+- 🚧 **Phase 2 — Tool calling** (implemented 2026-07-21; live acceptance
+  pending): `docs/plans/phase-2-tool-calling.md`. The tool loop
+  (`app/services/tool_loop.py`), both tools, tool calling in both adapters and
+  `tool_call` SSE frames are in; 59 tests green on the fake, ruff clean. Adds
+  ADR-007 (tool-turn shape) and `TOOL_LOOP_MAX_ITERATIONS`. **Still needs the
+  live acceptance run**: a duplicate-charge ticket against `anthropic` and
+  `openai`, expecting a `search_kb` call and a grounded answer.
 - ⬜ Phase 3 — Structured outputs & caching: `docs/plans/phase-3-structured-and-caching.md`
 - ⬜ Phase 4 — Evaluation: `docs/plans/phase-4-evals.md`
 - ⬜ Phase 5 — Prompt engineering & optimization: `docs/plans/phase-5-prompt-optimization.md`
   (versioned playbook variants behind a prompt registry, A/B'd on Phase 4's golden
-  set, with LLM-as-judge for the free-text fields; introduces ADR-007)
-- ⚠️ **No real LLM call has been made yet.** The adapters are written but
-  everything exercised so far runs on `FakeProvider`. Treat any claim about live
-  provider behaviour (streaming shape, usage fields, caching, error mapping) as
-  unverified until the live acceptance test is run against a real API.
+  set, with LLM-as-judge for the free-text fields; introduces ADR-008)
+- ⚠️ **Tool calling has not been exercised against a live API.** Phase 1's
+  streaming path is verified against both vendors, but every tool-loop test runs
+  on `FakeProvider` or on stubbed SDK clients. Treat claims about live tool
+  behaviour (streamed argument fragments, parallel-call shape, whether the model
+  picks the right tool) as unverified until the Phase 2 acceptance run happens.
 - ✅ **OpenAI model id resolved.** `OPENAI_MODEL` now defaults to `gpt-5.6-terra`
   (mid tier), with the id and rates verified against OpenAI's pricing page on
   2026-07-20 rather than carried from memory. The `.env.example` placeholder is
@@ -83,9 +87,9 @@ flows into a request-scoped `UsageLedger` (`ContextVar`) that the cost middlewar
 flushes when the response body completes. Design decisions are recorded as ADRs
 in `docs/architecture.md`.
 
-## The two subtle things
+## The three subtle things
 
-Both are documented as ADRs; both are the kind of bug that ships silently.
+All are documented as ADRs; all are the kind of bug that ships silently.
 
 1. **Streamed usage arrives last** (ADR-004). Reading the ledger when the handler
    returns yields a well-formatted `$0.00` for every streamed request. The flush
@@ -95,7 +99,15 @@ Both are documented as ADRs; both are the kind of bug that ships silently.
 2. **Prompt caching below the token floor is a no-op** (ADR-003). ~4096 tokens on
    Opus 4.8, ~2048 on the Sonnet family. The API accepts the marker and caches
    nothing — no error. The only acceptance criterion is
-   `cache_read_tokens > 0` on a second identical request.
+   `cache_read_tokens > 0` on a second identical request. Measured 2026-07-21:
+   the prefix (tool schemas + playbook) is **2117 tokens, 69 above the Sonnet
+   floor**. Anything that shrinks it turns caching off silently.
+3. **An unpaired tool call poisons the next request, not the current one**
+   (ADR-007). Drop a `ToolResult` — by letting a handler's exception escape, or
+   by discarding a call whose arguments would not parse — and the turn looks
+   fine; the *following* request fails with a vendor error about a tool_use block
+   with no tool_result. Hence `dispatch()` never raises, and a broken argument
+   string still becomes a `ToolCall` with empty arguments.
 
 ## Repo layout
 
@@ -107,7 +119,8 @@ app/api/               Routers, one module per endpoint + schemas.py
 app/providers/base.py  THE SEAM: domain model + LLMProvider Protocol
 app/providers/         Adapters: anthropic.py, openai.py, fake.py, registry.py
 app/domain/            TriageResult + prompts/playbook.md (the cacheable prefix)
-app/tools/             Tool specs, handlers, dispatch
+app/services/          Prompt assembly + the tool loop (what the routers delegate to)
+app/tools/             Tool specs, handlers, dispatch, the KB corpus
 app/observability/     ledger.py (per-request usage), middleware.py (cost log)
 tests/                 Pytest — runs entirely on the fake provider
 docs/architecture.md   ADRs (append-only record of decisions)

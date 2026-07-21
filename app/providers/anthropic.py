@@ -26,6 +26,7 @@ hard way:
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
@@ -36,12 +37,15 @@ from app.observability.ledger import current_ledger
 from app.providers.base import (
     Completion,
     Done,
+    Message,
     ParsedCompletion,
     Prompt,
     ProviderError,
     StopReason,
     StreamEvent,
     TextDelta,
+    ToolCall,
+    ToolCallRequested,
     ToolSpec,
     Usage,
     UsageReport,
@@ -96,15 +100,65 @@ class AnthropicProvider:
             blocks.append({"type": "text", "text": prompt.system})
         return blocks
 
-    def _request_kwargs(self, prompt: Prompt) -> dict[str, Any]:
+    @staticmethod
+    def _render_message(message: Message) -> dict[str, Any]:
+        """Render one domain turn as an Anthropic message.
+
+        Two translations happen here. An assistant turn that made tool calls
+        becomes a text block (only if there *is* text — the API rejects an empty
+        one) followed by a `tool_use` block per call. A `tool` turn becomes a
+        **user** message of `tool_result` blocks: Anthropic has no tool role, and
+        results are something the caller tells the model, so they arrive as user
+        content. All of that turn's results stay in the one message (ADR-007).
+        """
+        if message.role == "tool":
+            blocks: list[dict[str, Any]] = []
+            for result in message.tool_results:
+                block: dict[str, Any] = {
+                    "type": "tool_result",
+                    "tool_use_id": result.call_id,
+                    "content": result.content,
+                }
+                if result.is_error:
+                    block["is_error"] = True
+                blocks.append(block)
+            return {"role": "user", "content": blocks}
+
+        if message.tool_calls:
+            content: list[dict[str, Any]] = []
+            if message.content:
+                content.append({"type": "text", "text": message.content})
+            content.extend(
+                {"type": "tool_use", "id": call.id, "name": call.name, "input": call.arguments}
+                for call in message.tool_calls
+            )
+            return {"role": message.role, "content": content}
+
+        return {"role": message.role, "content": message.content}
+
+    @staticmethod
+    def _render_tools(tools: Sequence[ToolSpec]) -> list[dict[str, Any]]:
+        """Rewrap `ToolSpec`s into Anthropic's envelope.
+
+        The JSON Schema itself passes through untouched — only the key name
+        differs (`input_schema` here, `parameters` at OpenAI).
+        """
+        return [
+            {"name": tool.name, "description": tool.description, "input_schema": tool.parameters}
+            for tool in tools
+        ]
+
+    def _request_kwargs(self, prompt: Prompt, tools: Sequence[ToolSpec] = ()) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "model": self.model,
             "max_tokens": self._max_output_tokens,
-            "messages": [{"role": m.role, "content": m.content} for m in prompt.messages],
+            "messages": [self._render_message(m) for m in prompt.messages],
         }
         system = self._system_blocks(prompt)
         if system:
             kwargs["system"] = system
+        if tools:
+            kwargs["tools"] = self._render_tools(tools)
         return kwargs
 
     # -- response mapping -------------------------------------------------
@@ -149,6 +203,22 @@ class AnthropicProvider:
         if ledger is not None:
             ledger.record(self.name, usage)
 
+    @staticmethod
+    def _tool_call(call_id: str, name: str, raw_arguments: str) -> ToolCall:
+        """Parse a fully-reassembled argument string into a `ToolCall`.
+
+        Unparseable JSON becomes empty arguments rather than an exception. The
+        call still has to reach the loop: dropping it leaves the model's tool_use
+        block unpaired and the *next* request is rejected outright, whereas empty
+        arguments fail validation in `dispatch()` and come back as an error the
+        model can read and correct in the same turn.
+        """
+        try:
+            arguments = json.loads(raw_arguments) if raw_arguments.strip() else {}
+        except json.JSONDecodeError:
+            arguments = {}
+        return ToolCall(id=call_id, name=name, arguments=arguments)
+
     # -- protocol ---------------------------------------------------------
 
     async def stream(
@@ -156,10 +226,42 @@ class AnthropicProvider:
         prompt: Prompt,
         tools: Sequence[ToolSpec] = (),
     ) -> AsyncIterator[StreamEvent]:
+        """Stream a turn, reassembling tool arguments before announcing them.
+
+        Anthropic streams a tool call's arguments as `input_json_delta`
+        fragments — `{"que`, `ry": "dou`, `ble charge"}` — which are not valid
+        JSON individually. They are accumulated per content block index and
+        parsed at `content_block_stop`, so `ToolCallRequested` always carries a
+        complete argument dict and no consumer ever has to know that partial
+        JSON exists.
+
+        Iterating raw events rather than `stream.text_stream`, which yields text
+        only and would silently drop every tool call.
+        """
+        # Content block index -> the tool call being assembled there.
+        pending: dict[int, dict[str, str]] = {}
         try:
-            async with self._client.messages.stream(**self._request_kwargs(prompt)) as stream:
-                async for text in stream.text_stream:
-                    yield TextDelta(text=text)
+            async with self._client.messages.stream(
+                **self._request_kwargs(prompt, tools)
+            ) as stream:
+                async for event in stream:
+                    match event.type:
+                        case "content_block_start" if event.content_block.type == "tool_use":
+                            pending[event.index] = {
+                                "id": event.content_block.id,
+                                "name": event.content_block.name,
+                                "arguments": "",
+                            }
+                        case "content_block_delta" if event.delta.type == "text_delta":
+                            yield TextDelta(text=event.delta.text)
+                        case "content_block_delta" if event.delta.type == "input_json_delta":
+                            if event.index in pending:
+                                pending[event.index]["arguments"] += event.delta.partial_json
+                        case "content_block_stop" if event.index in pending:
+                            block = pending.pop(event.index)
+                            yield ToolCallRequested(
+                                call=self._tool_call(block["id"], block["name"], block["arguments"])
+                            )
                 final = await stream.get_final_message()
         except anthropic.APIError as exc:
             raise self._translate(exc) from exc
@@ -175,16 +277,23 @@ class AnthropicProvider:
         tools: Sequence[ToolSpec] = (),
     ) -> Completion:
         try:
-            message = await self._client.messages.create(**self._request_kwargs(prompt))
+            message = await self._client.messages.create(**self._request_kwargs(prompt, tools))
         except anthropic.APIError as exc:
             raise self._translate(exc) from exc
 
         text = "".join(block.text for block in message.content if block.type == "text")
+        # Non-streamed, the SDK has already parsed each tool call's arguments —
+        # `block.input` is a dict, not the partial JSON the streamed path sees.
+        tool_calls = tuple(
+            ToolCall(id=block.id, name=block.name, arguments=dict(block.input))
+            for block in message.content
+            if block.type == "tool_use"
+        )
         usage = self._usage_from(message.usage)
         self._record(usage)
         return Completion(
             text=text,
-            tool_calls=(),
+            tool_calls=tool_calls,
             usage=usage,
             stop_reason=self._stop_reason(message.stop_reason),
         )

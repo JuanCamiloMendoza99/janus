@@ -66,10 +66,32 @@ curl -N localhost:8000/v1/chat -H 'content-type: application/json' \
 
 Done when:
 
-- [ ] Both tools are invoked correctly by both real providers.
-- [ ] A deliberately failing tool returns `is_error=True` and the model recovers
+- [ ] Both tools are invoked correctly by both real providers. *(Request
+      rendering and streamed-argument reassembly are covered offline in
+      `tests/test_adapters.py`; the live run is still outstanding.)*
+- [x] A deliberately failing tool returns `is_error=True` and the model recovers
       in the same turn instead of the request 500-ing.
-- [ ] A parallel tool call (both tools in one turn) returns both results in a
+- [x] A parallel tool call (both tools in one turn) returns both results in a
       single message and completes.
-- [ ] The iteration cap is covered by a test.
-- [ ] A multi-call request logs the **sum** of all its model calls, not just the last.
+- [x] The iteration cap is covered by a test.
+- [x] A multi-call request logs the **sum** of all its model calls, not just the last.
+
+## Implementation notes (2026-07-21)
+
+Three decisions taken while implementing, recorded here because the plan above
+did not settle them:
+
+1. **The domain model had to grow.** `Message` was `role` + `content` and could
+   not express a turn that made tool calls or one that carried results. It now
+   has `tool_calls` and `tool_results`, with all of a turn's results in a single
+   `tool` message — see the new ADR-007, which also covers the OpenAI fan-out.
+2. **The loop drives `stream()`, not `complete()`,** on every iteration. Tools
+   are on by default, so a `complete()`-based loop would have turned `/v1/chat`
+   into a blocking endpoint for most requests.
+3. **Tool arguments are validated by a Pydantic model, and the published JSON
+   Schema is derived from it** (`app/tools/schema.py`). Two hand-written
+   artefacts would drift, and the drift only shows up when a live model finds it.
+
+The playbook is now wired in as `Prompt.cacheable_prefix` on `/v1/chat`: without
+it the escalation bar is unstated and `escalate_ticket` fires on anything. Phase
+3 still owns expanding it past the caching floor and proving `cache_read > 0`.

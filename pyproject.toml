@@ -29,6 +29,11 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["app*"]
 
+# The playbook is loaded at runtime as the cacheable prompt prefix, so it has to
+# ship with the package — a wheel without it fails on the first request.
+[tool.setuptools.package-data]
+"app.domain.prompts" = ["*.md"]
+
 [tool.ruff]
 line-length = 100
 
