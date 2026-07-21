@@ -11,13 +11,28 @@ excluded from the default run.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings, get_settings
 from app.main import app
+from app.observability.ledger import usage_store
 from app.providers.fake import FakeProvider
 from app.providers.registry import get_provider
+
+
+@pytest.fixture(autouse=True)
+def _isolate_usage_store() -> Iterator[None]:
+    """Zero the process-wide usage store around every test.
+
+    It is a module-level singleton, so without this a request in one test would
+    leak its totals into the next.
+    """
+    usage_store.reset()
+    yield
+    usage_store.reset()
 
 
 @pytest.fixture
