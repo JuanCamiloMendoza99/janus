@@ -43,7 +43,11 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-addopts = "-ra --strict-markers --strict-config"
+# `live` tests are excluded here rather than left to the caller to remember.
+# A bare `pytest` has to be free: the moment running the default suite can spend
+# money, someone runs it in a loop. `pytest -m live` still works — a `-m` on the
+# command line is applied after addopts and wins.
+addopts = '-ra --strict-markers --strict-config -m "not live"'
 asyncio_mode = "auto"
 markers = [
     "live: hits a real provider API — costs money, needs credentials, skipped by default",
