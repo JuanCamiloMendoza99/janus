@@ -161,6 +161,15 @@ wrong price is worse than a missing one because it looks authoritative.
 `input_tokens`-is-the-uncached-remainder rule from ADR-003 must be respected by
 every adapter, or `compute_cost_usd` double-counts the cached prefix.
 
+**Phase 1 update (2026-07-20).** The OpenAI rows were verified against OpenAI's
+published pricing page and added: `gpt-5.6-terra` ($2.50 / $15 per MTok, the
+default mid tier) plus `gpt-5.6-luna` and `gpt-5.6-sol` as flagship/small
+siblings. Cached input is exactly 0.10× the input rate on all of them, so the
+shared `OPENAI_CACHE_READ_MULTIPLIER = 0.10` holds. `get_pricing` special-cases
+the fake model to the all-zero `FAKE_MODEL_PRICING`; that lookup uses a
+call-time import of `FAKE_MODEL` to avoid a `core -> providers -> observability`
+cycle introduced once the fake began recording to the ledger.
+
 ---
 
 ## ADR-006 — Provider and model are separate settings
@@ -183,3 +192,9 @@ missing key fails with a clear message instead of an opaque vendor 401 later.
 Note for Phase 1: **verify the current OpenAI model id against the published
 list** rather than carrying one over from memory. The value in `.env.example` is
 a placeholder.
+
+**Phase 1 update (2026-07-20).** Done. The defaults are now each vendor's mid
+tier — `ANTHROPIC_MODEL=claude-sonnet-5`, `OPENAI_MODEL=gpt-5.6-terra` — with the
+OpenAI id verified against the published model list (the `gpt-5` placeholder is
+gone). The Anthropic adapter also takes `prompt_caching_enabled` from settings at
+construction, keeping the settings read in the registry.
