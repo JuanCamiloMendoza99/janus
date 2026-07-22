@@ -75,10 +75,12 @@ class AnthropicProvider:
         model: str,
         max_output_tokens: int,
         prompt_caching_enabled: bool = True,
+        adaptive_thinking: bool = False,
     ) -> None:
         self.model = model
         self._max_output_tokens = max_output_tokens
         self._prompt_caching_enabled = prompt_caching_enabled
+        self._adaptive_thinking = adaptive_thinking
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
 
     # -- request assembly -------------------------------------------------
@@ -312,11 +314,16 @@ class AnthropicProvider:
         client-side on the way back, so `TriageResult` needs no vendor-shaped
         twin.
 
-        Thinking is disabled deliberately. Sonnet 5 runs adaptive thinking
-        whenever the parameter is omitted; classifying against a closed enum
-        does not need it, and letting it run would spend part of `max_tokens` on
-        reasoning that never reaches the caller — and make the per-request cost
-        figures this project exists to report noisier for no gain.
+        Thinking is disabled by default. Sonnet 5 runs adaptive thinking
+        whenever the parameter is omitted; classifying against a closed enum was
+        judged not to need it, and letting it run spends part of `max_tokens` on
+        reasoning that never reaches the caller. `ANTHROPIC_ADAPTIVE_THINKING`
+        turns it back on — the setting exists because that judgement was a guess
+        until Phase 4 measured it, and the eval harness sweeps this axis.
+
+        Note the parameter is always sent explicitly, in either state. Omitting
+        it does not mean "off": on Sonnet 5 an omitted `thinking` runs adaptive,
+        so silence would make the behaviour depend on which model is configured.
 
         There are two ways this fails and they arrive by different routes. A
         refusal comes back as a normal response with nothing parsed in it. A
@@ -328,7 +335,7 @@ class AnthropicProvider:
         try:
             message = await self._client.messages.parse(
                 output_format=schema,
-                thinking={"type": "disabled"},
+                thinking={"type": "adaptive"} if self._adaptive_thinking else {"type": "disabled"},
                 **self._request_kwargs(prompt),
             )
         except anthropic.APIError as exc:
@@ -340,11 +347,7 @@ class AnthropicProvider:
             # would read as a free request rather than an unmeasured one, and a
             # silently wrong number is worse than a visible gap.
             raise ProviderError(
-                message=(
-                    "The model returned content that does not satisfy the schema, most "
-                    "often a response truncated before the JSON closed. Raise "
-                    "MAX_OUTPUT_TOKENS or shorten the input."
-                ),
+                message=self._validation_failure(exc),
                 provider=self.name,
                 retryable=False,
             ) from exc
@@ -363,6 +366,40 @@ class AnthropicProvider:
                 retryable=False,
             )
         return ParsedCompletion(parsed=parsed, usage=usage)
+
+    @staticmethod
+    def _validation_failure(exc: ValidationError) -> str:
+        """Name which of the two very different failures actually happened.
+
+        Both surface as a `pydantic.ValidationError` out of the SDK's response
+        parser, and they need opposite responses:
+
+        * **Invalid JSON** — the response was cut off mid-object, so the fix is
+          more output budget.
+        * **A violated field constraint** — the JSON is complete and well formed,
+          and a value is out of bounds. This is the one that surprises people.
+          The API's schema dialect does not support `maxLength` or numeric
+          bounds, so the SDK relocates them into the field *description*: the
+          model is asked to respect them, not made to. A verbose model sails
+          past the limit and Pydantic rejects the result on the way back.
+          Measured in Phase 4 at ~7% of tickets before the playbook started
+          telling the model its budget. Raising MAX_OUTPUT_TOKENS does nothing
+          for this, which is why the message must not say so.
+        """
+        errors = exc.errors()
+        if any(error["type"] == "json_invalid" for error in errors):
+            return (
+                "The response was truncated before the JSON closed. "
+                "Raise MAX_OUTPUT_TOKENS or shorten the input."
+            )
+        fields = ", ".join(
+            ".".join(str(part) for part in error["loc"]) for error in errors if error.get("loc")
+        )
+        return (
+            f"The model's response broke the schema's constraints on: {fields or '(root)'}. "
+            "The API treats bounds like max_length as advice rather than a constraint, so "
+            "the prompt has to state them too."
+        )
 
     @staticmethod
     def _parse_failure(stop_reason: str | None) -> str:

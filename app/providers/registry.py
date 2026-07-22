@@ -25,8 +25,15 @@ class ProviderConfigurationError(RuntimeError):
     """The selected provider cannot be constructed from the current settings."""
 
 
-def build_provider(settings: Settings) -> LLMProvider:
-    """Construct the provider named by `settings.llm_provider`."""
+def build_provider(settings: Settings, *, model: str | None = None) -> LLMProvider:
+    """Construct the provider named by `settings.llm_provider`.
+
+    `model` overrides whichever per-vendor model setting applies. It exists for
+    the evaluation harness, which sweeps several models of the same vendor in
+    one process: without it the caller would have to know that Anthropic reads
+    `anthropic_model` and OpenAI reads `openai_model`, and that knowledge is
+    exactly what this module exists to contain (ADR-006).
+    """
     match settings.llm_provider:
         case "anthropic":
             if not settings.anthropic_api_key:
@@ -35,9 +42,10 @@ def build_provider(settings: Settings) -> LLMProvider:
                 )
             return AnthropicProvider(
                 api_key=settings.anthropic_api_key,
-                model=settings.anthropic_model,
+                model=model or settings.anthropic_model,
                 max_output_tokens=settings.max_output_tokens,
                 prompt_caching_enabled=settings.prompt_caching_enabled,
+                adaptive_thinking=settings.anthropic_adaptive_thinking,
             )
         case "openai":
             if not settings.openai_api_key:
@@ -46,7 +54,7 @@ def build_provider(settings: Settings) -> LLMProvider:
                 )
             return OpenAIProvider(
                 api_key=settings.openai_api_key,
-                model=settings.openai_model,
+                model=model or settings.openai_model,
                 max_output_tokens=settings.max_output_tokens,
             )
         case "fake":
