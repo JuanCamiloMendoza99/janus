@@ -300,6 +300,14 @@ why this category over the near miss, what drove the severity, and what you were
 unsure about. When you had to choose between two readings, say which one you
 picked and what would change your mind. Do not restate the ticket.
 
+**These two fields have hard length limits and exceeding one is fatal.**
+`summary` may not exceed 280 characters and `reasoning` may not exceed 1000. A
+response over either limit is rejected outright — the ticket is not triaged at
+all, and nobody sees the answer you spent the effort on. Aim for **under 700
+characters** of reasoning and stop there; three tight sentences naming the
+deciding signal beat a paragraph that restates the rubric. Brevity here is not a
+style preference, it is the difference between a verdict and a failed request.
+
 ## Tools
 
 - `search_kb` — search the knowledge base. Call it before proposing
