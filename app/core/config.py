@@ -52,6 +52,18 @@ class Settings(BaseSettings):
     max_output_tokens: int = 4096
     request_timeout_seconds: float = 120.0
 
+    # --- Reasoning ---------------------------------------------------------
+    # Whether the model may reason before answering on the schema-constrained
+    # triage call. Off by default: Sonnet 5 thinks adaptively whenever the
+    # parameter is omitted, and classifying against a closed enum was judged not
+    # to need it (ADR-008). Phase 4 exists to check that judgement rather than
+    # trust it, which is why this is a setting and not a constant.
+    #
+    # Deliberately prefixed `anthropic_`: only that adapter honours it. OpenAI's
+    # equivalent is `reasoning_effort` and is not wired up, so a vendor-neutral
+    # name here would be a lie about half the gateway.
+    anthropic_adaptive_thinking: bool = False
+
     # --- Tools -------------------------------------------------------------
     # How many model calls one tool-using request may make before the loop gives
     # up. A model that keeps asking for the same tool would otherwise spend the

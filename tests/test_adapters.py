@@ -465,6 +465,30 @@ async def test_anthropic_parse_returns_the_validated_model(
     assert capture["system"][0]["cache_control"] == {"type": "ephemeral"}
 
 
+async def test_the_reasoning_axis_is_sent_explicitly_in_both_states() -> None:
+    """Omitting `thinking` is not the same as turning it off.
+
+    Sonnet 5 runs adaptive thinking whenever the parameter is absent, so silence
+    would make the behaviour depend on which model happens to be configured.
+    Both states are sent, and `ANTHROPIC_ADAPTIVE_THINKING` chooses between them
+    — the setting exists because Phase 4 measures whether the reasoning ADR-008
+    switched off was worth anything.
+    """
+    for adaptive, expected in ((False, "disabled"), (True, "adaptive")):
+        provider = AnthropicProvider(
+            api_key="sk-test",
+            model="claude-sonnet-5",
+            max_output_tokens=1024,
+            adaptive_thinking=adaptive,
+        )
+        capture: dict[str, Any] = {}
+        provider._client = _anthropic_parse_stub(parsed=Verdict(label="x"), capture=capture)
+
+        await provider.parse(_prompt(), Verdict)
+
+        assert capture["thinking"] == {"type": expected}
+
+
 @pytest.mark.parametrize(
     ("stop_reason", "expected_hint"),
     [

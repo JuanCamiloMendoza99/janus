@@ -75,10 +75,12 @@ class AnthropicProvider:
         model: str,
         max_output_tokens: int,
         prompt_caching_enabled: bool = True,
+        adaptive_thinking: bool = False,
     ) -> None:
         self.model = model
         self._max_output_tokens = max_output_tokens
         self._prompt_caching_enabled = prompt_caching_enabled
+        self._adaptive_thinking = adaptive_thinking
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
 
     # -- request assembly -------------------------------------------------
@@ -312,11 +314,16 @@ class AnthropicProvider:
         client-side on the way back, so `TriageResult` needs no vendor-shaped
         twin.
 
-        Thinking is disabled deliberately. Sonnet 5 runs adaptive thinking
-        whenever the parameter is omitted; classifying against a closed enum
-        does not need it, and letting it run would spend part of `max_tokens` on
-        reasoning that never reaches the caller — and make the per-request cost
-        figures this project exists to report noisier for no gain.
+        Thinking is disabled by default. Sonnet 5 runs adaptive thinking
+        whenever the parameter is omitted; classifying against a closed enum was
+        judged not to need it, and letting it run spends part of `max_tokens` on
+        reasoning that never reaches the caller. `ANTHROPIC_ADAPTIVE_THINKING`
+        turns it back on — the setting exists because that judgement was a guess
+        until Phase 4 measured it, and the eval harness sweeps this axis.
+
+        Note the parameter is always sent explicitly, in either state. Omitting
+        it does not mean "off": on Sonnet 5 an omitted `thinking` runs adaptive,
+        so silence would make the behaviour depend on which model is configured.
 
         There are two ways this fails and they arrive by different routes. A
         refusal comes back as a normal response with nothing parsed in it. A
@@ -328,7 +335,7 @@ class AnthropicProvider:
         try:
             message = await self._client.messages.parse(
                 output_format=schema,
-                thinking={"type": "disabled"},
+                thinking={"type": "adaptive"} if self._adaptive_thinking else {"type": "disabled"},
                 **self._request_kwargs(prompt),
             )
         except anthropic.APIError as exc:
