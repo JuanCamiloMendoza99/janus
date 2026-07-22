@@ -347,11 +347,7 @@ class AnthropicProvider:
             # would read as a free request rather than an unmeasured one, and a
             # silently wrong number is worse than a visible gap.
             raise ProviderError(
-                message=(
-                    "The model returned content that does not satisfy the schema, most "
-                    "often a response truncated before the JSON closed. Raise "
-                    "MAX_OUTPUT_TOKENS or shorten the input."
-                ),
+                message=self._validation_failure(exc),
                 provider=self.name,
                 retryable=False,
             ) from exc
@@ -370,6 +366,40 @@ class AnthropicProvider:
                 retryable=False,
             )
         return ParsedCompletion(parsed=parsed, usage=usage)
+
+    @staticmethod
+    def _validation_failure(exc: ValidationError) -> str:
+        """Name which of the two very different failures actually happened.
+
+        Both surface as a `pydantic.ValidationError` out of the SDK's response
+        parser, and they need opposite responses:
+
+        * **Invalid JSON** — the response was cut off mid-object, so the fix is
+          more output budget.
+        * **A violated field constraint** — the JSON is complete and well formed,
+          and a value is out of bounds. This is the one that surprises people.
+          The API's schema dialect does not support `maxLength` or numeric
+          bounds, so the SDK relocates them into the field *description*: the
+          model is asked to respect them, not made to. A verbose model sails
+          past the limit and Pydantic rejects the result on the way back.
+          Measured in Phase 4 at ~7% of tickets before the playbook started
+          telling the model its budget. Raising MAX_OUTPUT_TOKENS does nothing
+          for this, which is why the message must not say so.
+        """
+        errors = exc.errors()
+        if any(error["type"] == "json_invalid" for error in errors):
+            return (
+                "The response was truncated before the JSON closed. "
+                "Raise MAX_OUTPUT_TOKENS or shorten the input."
+            )
+        fields = ", ".join(
+            ".".join(str(part) for part in error["loc"]) for error in errors if error.get("loc")
+        )
+        return (
+            f"The model's response broke the schema's constraints on: {fields or '(root)'}. "
+            "The API treats bounds like max_length as advice rather than a constraint, so "
+            "the prompt has to state them too."
+        )
 
     @staticmethod
     def _parse_failure(stop_reason: str | None) -> str:
