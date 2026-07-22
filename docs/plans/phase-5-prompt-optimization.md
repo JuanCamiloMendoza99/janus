@@ -126,28 +126,36 @@ overrule them. This work is marked `live`.
 ## Verification
 
 ```bash
-# Sweep the prompt-variant axis on one fixed provider/model
-python scripts/run_eval.py --provider anthropic \
-  --prompts v1-baseline v2-examples v3-terse --out docs/evals/
+# Sweep the prompt-variant axis on one fixed configuration (provider+model+thinking).
+# Note: the runner's unit is a named *config*, not a bare --provider — sonnet is
+# claude-sonnet-5 without thinking. This is the real command the plan's earlier
+# `--provider anthropic` sketch stood in for (CLAUDE.md rule 3).
+python scripts/run_eval.py --configs sonnet \
+  --prompts v1-baseline v2-examples v3-terse --split holdout --out docs/evals/
+python scripts/judge_eval.py --results docs/evals/results-prompts-holdout-*.json --calibrate
 python scripts/report_prompt_eval.py
 
 # Confirm a variant is selectable by config, end to end
-TRIAGE_PROMPT=v2-examples LLM_PROVIDER=anthropic uvicorn app.main:app
+TRIAGE_PROMPT=v3-terse LLM_PROVIDER=anthropic uvicorn app.main:app
 curl -s localhost:8000/health   # reports the active prompt variant
+
+# Every variant clears the token floor, counted by the vendor (free, no completion)
+pytest -m live tests/test_prompts_live.py
 ```
 
 Done when:
 
-- [ ] The triage prompt is loaded through the registry and selected with
+- [x] The triage prompt is loaded through the registry and selected with
       `TRIAGE_PROMPT`; `/health` reports the active variant.
-- [ ] At least three variants exist, each testing a stated hypothesis, each
-      verified above the caching floor.
-- [ ] The runner sweeps the prompt axis and reports the objective metrics plus
+- [x] At least three variants exist, each testing a stated hypothesis, each
+      verified above the caching floor (`tests/test_prompts_live.py`, counted live).
+- [x] The runner sweeps the prompt axis and reports the objective metrics plus
       cost and latency per variant, on a held-out slice.
-- [ ] An LLM-as-judge scores `summary` and `reasoning` against a fixed rubric, with
-      a calibration check against hand scores and the judge model recorded.
-- [ ] A report in `docs/evals/` compares the variants, and the README names the
-      champion and the trade-off it accepts.
-- [ ] The default `TRIAGE_PROMPT` is the champion, and the total spend of the
-      prompt sweep is documented.
-- [ ] ADR-009 records the prompt-registry seam.
+- [x] An LLM-as-judge scores `summary` and `reasoning` against a fixed rubric, with
+      a calibration check against hand scores (78% exact) and the judge model
+      recorded (`claude-opus-4-8`).
+- [x] A report in `docs/evals/prompts.md` compares the variants, and the README
+      names the champion (`v2-examples`) and the trade-off it accepts.
+- [x] The default `TRIAGE_PROMPT` is the champion, and the total spend of the
+      prompt sweep is documented ($0.51: $0.30 triage + $0.21 judge).
+- [x] ADR-009 records the prompt-registry seam.

@@ -298,6 +298,79 @@ from cache, because the playbook dwarfs the ticket:
 }
 ```
 
+## Evaluation
+
+The question the gateway exists to make answerable: **which model should this
+workload actually pay for?** Fifty-five hand-labelled tickets
+([`evals/tickets.jsonl`](evals/tickets.jsonl)), four configurations, run through
+the same code path `/v1/triage` serves in production.
+
+| | Classification | Severity | $/1k tickets | p95 | ECE |
+|---|---:|---:|---:|---:|---:|
+| `claude-haiku-4-5` | 60.0% | 70.9% | **$1.61** | 5.1s | 0.277 |
+| `claude-sonnet-5` | 70.9% | 83.6% | $6.78 | 24.9s | 0.159 |
+| `claude-opus-4-8` | 74.5% | 87.3% | $11.22 | 9.7s | 0.149 |
+| `claude-sonnet-5` + thinking | **81.8%** | **89.1%** | $9.89 | 13.5s | **0.111** |
+
+**The cheap model is not cheap.** Haiku costs a seventh of Opus per ticket and
+loses sixteen points of severity accuracy — and severity is what drives
+escalation. Worse, it says 0.94 confidence on the band where it is right 67.6% of
+the time, so the automation gate that was supposed to catch its errors passes them
+through. Cheaper per ticket, more expensive per incident.
+
+The recommendation is **Sonnet with adaptive thinking**: the best accuracy *and*
+the best calibration of the four, for **less than Opus** — turning reasoning on
+beats buying the flagship, and costs less. It accepts a higher p95 (13.5s, reasoning
+runs before the answer), which an asynchronous triage queue does not feel and a
+synchronous caller would. Full numbers, calibration tables and the caveats (n=55,
+non-deterministic runs, and who wrote the tickets) in
+**[`docs/evals/`](docs/evals/README.md)**. The whole sweep cost $1.62.
+
+```bash
+python scripts/run_eval.py --configs haiku sonnet opus sonnet-thinking
+python scripts/report_eval.py
+```
+
+## Prompt optimization
+
+Phase 4 answers *which model to pay for*. Phase 5 answers the other axis: **which
+prompt to ship.** The playbook is not one hand-edited file any more — it is named,
+versioned variants behind a registry, selected by `TRIAGE_PROMPT` exactly the way
+the provider is selected by `LLM_PROVIDER` (ADR-009). The prompt is a swappable,
+measured dependency, not a matter of taste.
+
+```bash
+TRIAGE_PROMPT=v3-terse LLM_PROVIDER=anthropic uvicorn app.main:app
+curl localhost:8000/health     # reports the active variant
+```
+
+Three variants, each testing a stated hypothesis, A/B'd on the held-out slice on a
+fixed model — plus an **LLM-as-judge** (a stronger, separate model) for the two
+free-text fields the labels cannot grade, calibrated against hand scores before it
+is trusted:
+
+| Variant | Prefix tokens | Classification | $/1k | Dropped (train) | Judge |
+|---|---:|---:|---:|---:|---:|
+| `v1-baseline` | 6,531 | 58.8% | $5.80 | 3/38 | 4.81 |
+| **`v2-examples`** | 7,913 | **64.7%** | $6.33 | **1/38** | **4.89** |
+| `v3-terse` | 4,738 | 64.7% | $5.69 | 5/38 | 4.81 |
+
+On 17 held-out tickets the accuracy gaps are one ticket wide — noise — so the
+decision falls to the axes that are measured, not sampled: **`v2-examples` is the
+champion** for the lowest dropped-ticket rate and the best free-text quality,
+accepting +21% prefix tokens. That premium is ~+11% per *cached* ticket, because
+the playbook caches — the Phase 3 caching work is what makes shipping the richer,
+more reliable prompt nearly free. `v3-terse` is the honourable near-miss: the same
+holdout accuracy at 40% fewer tokens, set aside because its higher over-length
+failure rate outweighs an 11% saving on an already-cached prefix. Full comparison,
+judge calibration and caveats in **[`docs/evals/prompts.md`](docs/evals/prompts.md)**.
+
+```bash
+python scripts/run_eval.py --configs sonnet --prompts v1-baseline v2-examples v3-terse --split holdout
+python scripts/judge_eval.py --results docs/evals/results-prompts-holdout-*.json --calibrate
+python scripts/report_prompt_eval.py
+```
+
 ## Testing
 
 ```bash
@@ -329,12 +402,16 @@ app/
 ├── core/             # Settings, logging, pricing table
 ├── api/              # Routers (thin) + HTTP schemas
 ├── providers/        # base.py = the seam; anthropic / openai / fake adapters
-├── domain/           # TriageResult + the cacheable support playbook
+├── domain/           # TriageResult + the versioned playbook variants + registry
 ├── services/         # Prompt assembly + the tool loop
 ├── tools/            # Tool specs, handlers, dispatch and the KB corpus
+├── evals/            # The eval harness: dataset, runner, scoring, judge
 └── observability/    # Usage ledger + cost middleware
+evals/                # The golden dataset + judge calibration set (dev tooling)
+scripts/              # Eval + judge CLIs (argparse and print only)
 tests/                # Pytest — runs entirely on the fake provider
 docs/architecture.md  # ADRs (append-only)
+docs/evals/           # Committed comparison reports + raw results
 docs/plans/           # Per-phase implementation plans
 ```
 
@@ -349,8 +426,8 @@ Each phase has an implementation-ready plan in [`docs/plans/`](docs/plans/README
 - [x] **[Phase 1 — Provider seam & streaming](docs/plans/phase-1-provider-seam.md)**: both real adapters, SSE, per-request cost log
 - [x] **[Phase 2 — Tool calling](docs/plans/phase-2-tool-calling.md)**: the tool loop, normalized across vendors
 - [x] **[Phase 3 — Structured outputs & caching](docs/plans/phase-3-structured-and-caching.md)**: `/v1/triage`, prompt caching proven by measurement
-- [ ] **[Phase 4 — Evaluation](docs/plans/phase-4-evals.md)**: which provider to actually pay for — cost, latency and accuracy on a golden dataset
-- [ ] **[Phase 5 — Prompt engineering & optimization](docs/plans/phase-5-prompt-optimization.md)**: which prompt to ship — versioned playbook variants, A/B'd on the golden set, with LLM-as-judge for the free-text fields
+- [x] **[Phase 4 — Evaluation](docs/plans/phase-4-evals.md)**: which provider to actually pay for — cost, latency and accuracy on a golden dataset
+- [x] **[Phase 5 — Prompt engineering & optimization](docs/plans/phase-5-prompt-optimization.md)**: which prompt to ship — versioned playbook variants, A/B'd on the golden set, with LLM-as-judge for the free-text fields
 - [ ] **[Phase 6 — Web console](docs/plans/phase-6-web-console.md)**: a minimal React client that makes streaming, tool calls and per-request cost visible without a terminal
 
 ## Current status
@@ -372,6 +449,21 @@ adapters, the playbook grown from a stub into a 6,737-token prefix, and caching
 proven by measurement rather than by inspection: 83% cheaper on a repeated
 ticket, verified against the live Anthropic API and encoded as
 `tests/test_caching_live.py` so it stays proven.
+
+**Phase 4 — done.** A hand-labelled golden set of 55 tickets, a runner that
+sweeps provider × model × reasoning under a spending cap, and eight metrics per
+configuration — including the two that decide the money rather than the demo:
+severity accuracy and confidence calibration. The headline finding is above; the
+report and the raw per-ticket outcomes are in [`docs/evals/`](docs/evals/README.md)
+so every figure can be recomputed rather than believed.
+
+**Phase 5 — done.** The playbook is now versioned variants behind a prompt
+registry, selected by `TRIAGE_PROMPT` (ADR-009); `/health` reports the active one.
+Three variants were A/B'd on the held-out slice with an LLM-as-judge for the
+free-text fields, calibrated against hand scores (78% exact agreement). The
+champion is `v2-examples` and the default points at it; the comparison and the
+trade-off it accepts are in [`docs/evals/prompts.md`](docs/evals/prompts.md). The
+whole prompt sweep, judge included, cost $0.51.
 
 One honest gap: there is no OpenAI key on the machine this was built on, so
 `OpenAIProvider.parse()` is covered by tests against a stubbed SDK — including
