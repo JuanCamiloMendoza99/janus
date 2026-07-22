@@ -31,7 +31,7 @@ from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 import anthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.observability.ledger import current_ledger
 from app.providers.base import (
@@ -303,4 +303,84 @@ class AnthropicProvider:
         prompt: Prompt,
         schema: type[T],
     ) -> ParsedCompletion[T]:
-        raise NotImplementedError("Phase 3")
+        """Run a turn constrained to `schema`, via `client.messages.parse()`.
+
+        The SDK derives the JSON Schema from the Pydantic model and validates the
+        response back into it. Constraints the API's schema dialect does not
+        support — `confidence`'s `ge`/`le`, the `max_length` on the free-text
+        fields — are moved into the field description by the SDK and enforced
+        client-side on the way back, so `TriageResult` needs no vendor-shaped
+        twin.
+
+        Thinking is disabled deliberately. Sonnet 5 runs adaptive thinking
+        whenever the parameter is omitted; classifying against a closed enum
+        does not need it, and letting it run would spend part of `max_tokens` on
+        reasoning that never reaches the caller — and make the per-request cost
+        figures this project exists to report noisier for no gain.
+
+        There are two ways this fails and they arrive by different routes. A
+        refusal comes back as a normal response with nothing parsed in it. A
+        response truncated mid-JSON makes the SDK raise `pydantic.ValidationError`
+        while validating, *before* returning anything — so that one has to be
+        caught, or a vendor-adjacent exception escapes past the seam (ADR-001).
+        Verified against the live API on 2026-07-21 by capping `max_tokens` at 16.
+        """
+        try:
+            message = await self._client.messages.parse(
+                output_format=schema,
+                thinking={"type": "disabled"},
+                **self._request_kwargs(prompt),
+            )
+        except anthropic.APIError as exc:
+            raise self._translate(exc) from exc
+        except ValidationError as exc:
+            # The one call this ledger cannot price: the SDK raises during
+            # response validation, so the `Message` carrying `usage` never
+            # reaches this frame. Left unrecorded on purpose — writing a zero
+            # would read as a free request rather than an unmeasured one, and a
+            # silently wrong number is worse than a visible gap.
+            raise ProviderError(
+                message=(
+                    "The model returned content that does not satisfy the schema, most "
+                    "often a response truncated before the JSON closed. Raise "
+                    "MAX_OUTPUT_TOKENS or shorten the input."
+                ),
+                provider=self.name,
+                retryable=False,
+            ) from exc
+
+        # Recorded before the result is inspected: the call was billed whether or
+        # not it came back usable, and a ledger that silently omits the failures
+        # is wrong in exactly the case worth auditing.
+        usage = self._usage_from(message.usage)
+        self._record(usage)
+
+        parsed = message.parsed_output
+        if parsed is None:
+            raise ProviderError(
+                message=self._parse_failure(message.stop_reason),
+                provider=self.name,
+                retryable=False,
+            )
+        return ParsedCompletion(parsed=parsed, usage=usage)
+
+    @staticmethod
+    def _parse_failure(stop_reason: str | None) -> str:
+        """Explain an empty `parsed_output` in terms of what to do about it.
+
+        There is no fallback path here on purpose (ADR-008): parsing free text
+        with `json.loads` when the vendor could not honor the schema would turn
+        the endpoint's guarantee into a coin flip. So the failure has to carry
+        enough for the caller to act, and the three causes need three different
+        responses.
+        """
+        match stop_reason:
+            case "refusal":
+                return "The model refused to produce a response for this input."
+            case "max_tokens":
+                return (
+                    "The response was truncated before the schema was satisfied. "
+                    "Raise MAX_OUTPUT_TOKENS or shorten the input."
+                )
+            case _:
+                return f"The model returned no schema-valid content (stop_reason={stop_reason!r})."

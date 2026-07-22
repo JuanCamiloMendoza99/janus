@@ -14,6 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
+from app.api.errors import http_status_for
 from app.api.schemas import ChatRequest
 from app.core.config import Settings, get_settings
 from app.core.pricing import compute_cost_usd
@@ -89,20 +90,6 @@ def _frame(event: StreamEvent) -> dict[str, str]:
             }
 
 
-def _http_status(exc: ProviderError) -> int:
-    """Map a pre-stream provider failure to an HTTP status.
-
-    Rate limits stay 429, malformed requests 400, everything else is an upstream
-    failure (502). Once the SSE body has started this no longer applies — the
-    status line is already sent, so mid-stream errors become a terminal frame.
-    """
-    if exc.status_code == 429:
-        return 429
-    if exc.status_code == 400:
-        return 400
-    return 502
-
-
 async def _no_frames() -> AsyncIterator[dict[str, str]]:
     """An empty SSE body (a stream that produced no events)."""
     return
@@ -162,7 +149,7 @@ async def chat(
     try:
         first = await anext(stream)
     except ProviderError as exc:
-        raise HTTPException(status_code=_http_status(exc), detail=str(exc)) from exc
+        raise HTTPException(status_code=http_status_for(exc), detail=str(exc)) from exc
     except StopAsyncIteration:
         return EventSourceResponse(_no_frames())
 

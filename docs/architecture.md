@@ -125,6 +125,41 @@ Two further consequences already visible:
   the loop re-sends the same prefix, so the write is amortized within a single
   request rather than across requests.
 
+**Phase 3 measurement (2026-07-21).** The playbook is no longer a stub and the
+margin is no longer 3%. Two identical `POST /v1/triage` requests against
+`claude-sonnet-5`, the second inside the five-minute TTL:
+
+| | input | output | cache write | cache read | cost | latency |
+|---|---:|---:|---:|---:|---:|---:|
+| First (cold prefix) | 53 | 198 | 7,929 | 0 | **$0.032863** | 8.6s |
+| Second (identical) | 53 | 212 | 0 | 7,929 | **$0.005718** | 5.0s |
+
+**83% cheaper, and 42% faster**, for a verdict that was identical on both runs
+(`billing` / `high` / `escalate`). Isolating the prompt half: $0.029889 →
+$0.002538, a 91.5% drop, which is the 1.25x write premium giving way to the 0.1x
+read rate. The residue is output tokens, which are never discounted — and the
+second call happened to write 14 more of them, so the comparison is if anything
+unkind to the cached run.
+
+Three things this measurement pinned down that the Phase 2 one could not:
+
+* **The playbook clears the floor on its own.** 6,737 tokens counted with
+  `messages.count_tokens`, against the *highest* floor in the table (4,096 on the
+  Opus 4.x family and Haiku 4.5). It is sized against the high one deliberately:
+  Sonnet 5 is not in the published table at all, so assuming the lower 2,048 would
+  be a bet rather than a fact, and re-pointing `ANTHROPIC_MODEL` must not silently
+  switch caching off.
+* **The response schema is inside the cached prefix.** The prefix on the wire is
+  7,929 tokens, ~1,190 more than the playbook: `output_config.format` renders the
+  `TriageResult` JSON schema ahead of the messages, so it caches alongside. Worth
+  knowing before anyone "simplifies" the schema to save tokens — it would
+  invalidate the prefix, not shrink it.
+* **`/v1/chat` and `/v1/triage` do not share a cache entry.** Render order is
+  `tools` → `system` → `messages`; chat sends tool definitions and triage does
+  not, so the two prefixes diverge at the first block. The Phase 2 figure of 2,117
+  tokens was tool schemas *plus* playbook, which is why the triage path could not
+  have inherited it.
+
 ---
 
 ## ADR-004 — Cost accounting lives in a request-scoped ledger, not in the middleware
@@ -301,3 +336,78 @@ Tool arguments are validated against a Pydantic model, and `ToolSpec.parameters`
 is *derived* from that same model (`app/tools/schema.py`). A hand-written schema
 next to a hand-written handler drifts, and the drift is invisible until a live
 model finds it.
+
+---
+
+## ADR-008 — Structured output is a constraint, not a parse
+
+**Status:** accepted (Phase 3)
+
+**Context.** `POST /v1/triage` promises a `TriageResult`. There are two ways to
+keep that promise. The common one is to ask the model for JSON in the prompt,
+run `json.loads` on whatever comes back, and retry on failure. The other is to
+use the vendors' schema-constrained decoding — `client.messages.parse()` at
+Anthropic, `chat.completions.parse()` at OpenAI — where the schema restricts
+generation rather than describing a hope.
+
+The difference matters more than it looks. Prompt-and-parse fails at a rate that
+depends on the model, the temperature and the length of the input, and it fails
+*silently* into a retry loop that costs money. Worse, the tempting fallback —
+"try the constrained call, and if the vendor cannot honour the schema, fall back
+to parsing text" — makes the endpoint's guarantee conditional on something the
+caller cannot observe.
+
+**Decision.** Both adapters use native constrained decoding, and **there is no
+fallback**. If the vendor cannot produce a schema-valid response, `parse()`
+raises `ProviderError` and the router returns an HTTP error. A triage verdict
+with invented fields routes a real ticket to the wrong queue; a 502 the caller
+can retry is strictly better than a plausible wrong answer.
+
+`TriageResult` needs no vendor-shaped twin. Constraints the API's schema dialect
+does not support (`confidence`'s `ge`/`le`, the `max_length` on the free-text
+fields) are relocated into the field description by the SDK and enforced
+client-side on the way back, so the domain model stays the domain model.
+
+**Consequence: the fake provider cannot serve this endpoint.**
+`FakeProvider.parse()` builds an instance from field defaults and raises for any
+schema with required fields — which `TriageResult` is, entirely. That is
+deliberate. A fake that fabricated plausible values would satisfy *every*
+schema, which means no schema change could ever fail a test, and the model whose
+whole point is that nothing is optional would be the first thing it stopped
+checking. So `/v1/triage` returns `501` on the default provider and needs real
+credentials, stated in the README rather than hidden behind a convincing demo.
+
+**The three failure paths do not arrive the same way.** This is the part worth
+writing down, because two of the three are exceptions the seam would otherwise
+leak (ADR-001):
+
+| Failure | Anthropic | OpenAI |
+|---|---|---|
+| Model refused | Response returns, `parsed_output` is `None` | `message.refusal` is set |
+| Output truncated mid-JSON | **Raises `pydantic.ValidationError`** from inside the SDK's response parser | **Raises `LengthFinishReasonError`** |
+| Content filtered | — | **Raises `ContentFilterFinishReasonError`** |
+
+Neither `LengthFinishReasonError` nor `ContentFilterFinishReasonError` descends
+from `openai.APIError`, so the `except openai.APIError` used everywhere else in
+that adapter does not catch them. Both were found by testing rather than by
+reading: the truncation path was confirmed live on 2026-07-21 by capping
+`max_tokens` at 16.
+
+One accounting gap is left in, knowingly: when the Anthropic SDK raises during
+validation, the `Message` carrying `usage` never reaches the adapter, so that
+call's cost cannot be recorded. It is a real request that the ledger will not
+see. Recording a zero instead would be worse — it would read as a free request
+rather than an unmeasured one.
+
+**Caching consequence.** `/v1/chat` and `/v1/triage` **do not share a cache
+entry**, even though they send the same playbook. Anthropic renders
+`tools` → `system` → `messages`, chat sends tool definitions and triage does
+not, so the two prefixes differ from the first block onward. This is why the
+playbook has to clear the token floor on its own merits: on the triage path it
+cannot borrow the tool schemas' tokens the way the Phase 2 measurement did.
+
+**Thinking is disabled on the triage call.** Sonnet 5 runs adaptive thinking
+whenever the parameter is omitted. Classifying against a closed enum does not
+need it, and leaving it on would spend part of `max_tokens` on reasoning that
+never reaches the caller while making the per-request cost figures — the thing
+this project exists to report — noisier for no gain.

@@ -321,4 +321,61 @@ class OpenAIProvider:
         prompt: Prompt,
         schema: type[T],
     ) -> ParsedCompletion[T]:
-        raise NotImplementedError("Phase 3")
+        """Run a turn constrained to `schema`, via `chat.completions.parse()`.
+
+        Where the failure modes diverge from Anthropic's: this SDK **raises**
+        rather than returning a response with nothing parsed in it, and the two
+        exceptions it raises for that (`LengthFinishReasonError`,
+        `ContentFilterFinishReasonError`) descend from `OpenAIError` rather than
+        `APIError` — so the `except openai.APIError` used everywhere else in
+        this file does not catch them. Left uncaught they would escape as vendor
+        types, which is the one thing the seam exists to prevent (ADR-001).
+        Both are translated to `ProviderError` here.
+        """
+        try:
+            completion = await self._client.chat.completions.parse(
+                response_format=schema,
+                **self._request_kwargs(prompt),
+            )
+        except openai.APIError as exc:
+            raise self._translate(exc) from exc
+        except openai.LengthFinishReasonError as exc:
+            # The truncated response was billed for every token it did produce,
+            # and the SDK hands the partial completion back on the exception —
+            # so the ledger can still be told the truth about what it cost.
+            self._record(self._usage_from(exc.completion.usage))
+            raise ProviderError(
+                message=(
+                    "The response was truncated before the schema was satisfied. "
+                    "Raise MAX_OUTPUT_TOKENS or shorten the input."
+                ),
+                provider=self.name,
+                retryable=False,
+            ) from exc
+        except openai.ContentFilterFinishReasonError as exc:
+            raise ProviderError(
+                message="The response was rejected by the content filter.",
+                provider=self.name,
+                retryable=False,
+            ) from exc
+
+        # Recorded before the result is inspected: the call was billed whether or
+        # not it came back usable, and a ledger that silently omits the failures
+        # is wrong in exactly the case worth auditing.
+        usage = self._usage_from(completion.usage)
+        self._record(usage)
+
+        message = completion.choices[0].message
+        if message.refusal:
+            raise ProviderError(
+                message=f"The model refused to produce a response: {message.refusal}",
+                provider=self.name,
+                retryable=False,
+            )
+        if message.parsed is None:
+            raise ProviderError(
+                message="The model returned no schema-valid content.",
+                provider=self.name,
+                retryable=False,
+            )
+        return ParsedCompletion(parsed=message.parsed, usage=usage)
