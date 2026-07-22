@@ -181,18 +181,11 @@ def test_two_different_tickets_share_a_byte_identical_prefix(
     assert first.messages[0].content != second.messages[0].content
 
 
-def test_the_playbook_clears_the_caching_floor_by_character_count() -> None:
-    """A crude guard against the prefix being trimmed below the token floor.
-
-    Characters, not tokens: a real count needs the vendor's endpoint and costs a
-    network round trip, so that assertion lives in `tests/test_caching_live.py`.
-    This one runs in CI and catches the obvious version of the mistake — someone
-    shortening the playbook and not noticing that caching stops.
-
-    16,000 characters is well under the measured 6,594 tokens; it is a floor, not
-    an estimate.
-    """
-    assert len(load_playbook()) > 16_000
+# The caching-floor guard used to live here as a single check on the one
+# playbook. It now covers every variant and moved to `tests/test_prompts.py`
+# (offline, by character count) and `tests/test_prompts_live.py` (against the
+# vendor's tokenizer), because there is more than one prompt to keep above the
+# floor now (ADR-009).
 
 
 # -- failures ---------------------------------------------------------------

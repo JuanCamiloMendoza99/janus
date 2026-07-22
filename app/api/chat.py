@@ -18,6 +18,7 @@ from app.api.errors import http_status_for
 from app.api.schemas import ChatRequest
 from app.core.config import Settings, get_settings
 from app.core.pricing import compute_cost_usd
+from app.domain.prompts import load_playbook
 from app.providers.base import (
     Done,
     LLMProvider,
@@ -145,6 +146,7 @@ async def chat(
         messages=request.messages,
         use_tools=request.use_tools,
         max_iterations=settings.tool_loop_max_iterations,
+        playbook=load_playbook(settings.triage_prompt),
     )
     try:
         first = await anext(stream)

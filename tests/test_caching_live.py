@@ -27,6 +27,7 @@ import pytest
 from app.api.schemas import TriageRequest
 from app.core.config import Settings, get_settings
 from app.core.pricing import compute_cost_usd
+from app.domain.prompts import load_playbook
 from app.domain.triage import TriageResult
 from app.providers.anthropic import AnthropicProvider
 from app.providers.base import ProviderError
@@ -78,7 +79,7 @@ async def test_the_playbook_clears_the_caching_floor(provider: AnthropicProvider
     path — it does not get to borrow the tool schemas' tokens the way `/v1/chat`
     does. It has to clear the floor on its own merits.
     """
-    kwargs = provider._request_kwargs(build_triage_prompt(TICKET))
+    kwargs = provider._request_kwargs(build_triage_prompt(TICKET, load_playbook()))
     counted = await provider._client.messages.count_tokens(
         model=kwargs["model"],
         system=kwargs["system"],
@@ -98,8 +99,8 @@ async def test_a_repeated_ticket_is_served_from_cache(provider: AnthropicProvide
     recently it last ran. What holds either way is that the prefix is cached
     *somehow* on the first call and read back on the second.
     """
-    first = await provider.parse(build_triage_prompt(TICKET), TriageResult)
-    second = await provider.parse(build_triage_prompt(TICKET), TriageResult)
+    first = await provider.parse(build_triage_prompt(TICKET, load_playbook()), TriageResult)
+    second = await provider.parse(build_triage_prompt(TICKET, load_playbook()), TriageResult)
 
     assert first.usage.cache_write_tokens + first.usage.cache_read_tokens > CACHING_FLOOR_TOKENS
     assert second.usage.cache_read_tokens > CACHING_FLOOR_TOKENS
@@ -120,8 +121,10 @@ async def test_a_cached_request_costs_a_fraction_of_an_uncached_one(
     and does not depend on whether the cache happened to be warm, which the
     naive "second request is cheaper than the first" version does.
     """
-    await provider.parse(build_triage_prompt(TICKET), TriageResult)
-    cached = (await provider.parse(build_triage_prompt(TICKET), TriageResult)).usage
+    await provider.parse(build_triage_prompt(TICKET, load_playbook()), TriageResult)
+    cached = (
+        await provider.parse(build_triage_prompt(TICKET, load_playbook()), TriageResult)
+    ).usage
 
     def price(input_tokens: int, cache_read_tokens: int) -> float:
         return compute_cost_usd(
@@ -148,7 +151,7 @@ async def test_the_verdict_is_schema_valid(provider: AnthropicProvider) -> None:
     when the vendor cannot honor the schema, so a `TriageResult` in hand is
     proof the constraint held.
     """
-    result = await provider.parse(build_triage_prompt(TICKET), TriageResult)
+    result = await provider.parse(build_triage_prompt(TICKET, load_playbook()), TriageResult)
 
     verdict = result.parsed
     assert 0.0 <= verdict.confidence <= 1.0
@@ -175,4 +178,4 @@ async def test_an_impossible_schema_raises_rather_than_degrading(
     )
 
     with pytest.raises(ProviderError, match="MAX_OUTPUT_TOKENS"):
-        await starved.parse(build_triage_prompt(TICKET), TriageResult)
+        await starved.parse(build_triage_prompt(TICKET, load_playbook()), TriageResult)

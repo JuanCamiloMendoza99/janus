@@ -32,6 +32,7 @@ from app.evals.results import SCHEMA_VERSION, dump_runs, load_runs
 from app.evals.runner import (
     CONFIGS_BY_NAME,
     BudgetExceeded,
+    prompt_variants_of,
     run_config,
     run_sweep,
 )
@@ -474,6 +475,28 @@ def test_a_configuration_derives_its_settings_from_the_base(settings: Settings) 
 
 def test_the_default_configuration_leaves_thinking_off(settings: Settings) -> None:
     assert CONFIGS_BY_NAME["haiku"].settings_for(settings).anthropic_adaptive_thinking is False
+
+
+def test_a_configuration_carries_its_prompt_into_settings(settings: Settings) -> None:
+    """The prompt variant is a swept axis, so it has to reach the settings the run uses."""
+    config = CONFIGS_BY_NAME["sonnet"]
+    assert config.settings_for(settings).triage_prompt == config.prompt
+
+
+def test_prompt_variants_expand_one_config_into_one_run_each() -> None:
+    """The Phase 5 sweep crosses a fixed model with the prompt axis."""
+    expanded = prompt_variants_of(CONFIGS_BY_NAME["sonnet"], ["v1-baseline", "v3-terse"])
+
+    assert [c.name for c in expanded] == ["sonnet+v1-baseline", "sonnet+v3-terse"]
+    assert [c.prompt for c in expanded] == ["v1-baseline", "v3-terse"]
+    # The model and everything else about the configuration is held fixed.
+    assert {c.model for c in expanded} == {CONFIGS_BY_NAME["sonnet"].model}
+
+
+def test_an_unknown_prompt_variant_is_rejected() -> None:
+    """A typo must fail loudly, not run the default under a variant's name."""
+    with pytest.raises(ValueError, match="nonexistent"):
+        prompt_variants_of(CONFIGS_BY_NAME["sonnet"], ["nonexistent"])
 
 
 def test_running_no_tickets_is_an_error(settings: Settings, stub: StubProvider) -> None:

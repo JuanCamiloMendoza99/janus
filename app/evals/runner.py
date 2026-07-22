@@ -18,11 +18,12 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
 from app.api.schemas import TriageRequest
 from app.core.config import ProviderName, Settings
+from app.domain.prompts import DEFAULT_VARIANT, VARIANTS, load_playbook
 from app.domain.triage import TriageResult
 from app.evals.dataset import EvalTicket
 from app.evals.scoring import TicketOutcome
@@ -38,7 +39,7 @@ class BudgetExceeded(RuntimeError):
 
 @dataclass(frozen=True)
 class EvalConfig:
-    """One point in the sweep: a provider, a model, and how it is configured."""
+    """One point in the sweep: a provider, a model, a prompt, and how it is configured."""
 
     name: str
     provider: ProviderName
@@ -49,6 +50,10 @@ class EvalConfig:
     #: the default 4096 would truncate part of the set and register as failures
     #: that are really a misconfiguration.
     max_output_tokens: int | None = None
+    #: The playbook variant this configuration sends (ADR-009). Phase 4 swept
+    #: provider x model with this held fixed; Phase 5 sweeps this with the model
+    #: held fixed. One axis at a time, or a difference has two explanations.
+    prompt: str = DEFAULT_VARIANT
 
     def settings_for(self, base: Settings) -> Settings:
         """Derive the settings this configuration runs under.
@@ -60,6 +65,7 @@ class EvalConfig:
         update: dict[str, object] = {
             "llm_provider": self.provider,
             "anthropic_adaptive_thinking": self.adaptive_thinking,
+            "triage_prompt": self.prompt,
         }
         if self.max_output_tokens is not None:
             update["max_output_tokens"] = self.max_output_tokens
@@ -115,18 +121,21 @@ async def run_config(
     tracker = spend if spend is not None else SpendTracker()
 
     started_at = datetime.now(UTC)
+    playbook = load_playbook(config.prompt)
 
     # The first ticket runs alone, and this is not politeness. Prompt caching is
     # a prefix match against an entry that only becomes readable once the first
     # response has begun streaming — so N concurrent requests with the same
     # playbook all miss, and the sweep pays the 1.25x write premium N times
     # instead of once. One request first, then fan out against a warm cache.
-    outcomes: list[TicketOutcome] = [await _triage_one(provider, tickets[0])]
+    outcomes: list[TicketOutcome] = [await _triage_one(provider, tickets[0], playbook)]
     tracker.usd += outcomes[0].cost_usd
 
     for batch in _batches(tickets[1:], concurrency):
         tracker.check()
-        results = await asyncio.gather(*(_triage_one(provider, ticket) for ticket in batch))
+        results = await asyncio.gather(
+            *(_triage_one(provider, ticket, playbook) for ticket in batch)
+        )
         outcomes.extend(results)
         tracker.usd += sum(result.cost_usd for result in results)
 
@@ -172,7 +181,7 @@ async def run_sweep(
     return results
 
 
-async def _triage_one(provider: LLMProvider, ticket: EvalTicket) -> TicketOutcome:
+async def _triage_one(provider: LLMProvider, ticket: EvalTicket, playbook: str) -> TicketOutcome:
     """Triage one ticket, recording a failure as data rather than raising.
 
     One bad ticket must not abandon a sweep that has already been paid for, and
@@ -193,7 +202,7 @@ async def _triage_one(provider: LLMProvider, ticket: EvalTicket) -> TicketOutcom
 
     started = time.perf_counter()
     try:
-        predicted = (await triage_ticket(provider, request)).parsed
+        predicted = (await triage_ticket(provider, request, playbook)).parsed
     except ProviderError as exc:
         error = str(exc)
     latency_s = time.perf_counter() - started
@@ -227,11 +236,23 @@ def _batches(items: Sequence[EvalTicket], size: int) -> list[Sequence[EvalTicket
 # run here — there is no `OPENAI_API_KEY` on the machine this was built on — and
 # they stay in the list rather than being deleted so the cross-vendor comparison
 # is one credential away rather than one refactor away.
+#
+# The prompt is pinned to `v1-baseline` on every entry, not left to
+# `DEFAULT_VARIANT`. Phase 4 measured the provider axis against the playbook that
+# shipped then; when Phase 5 moved the default to the champion, that must not
+# retroactively change what the provider comparison was run against. Phase 5
+# sweeps the prompt axis separately (`prompt_variants_of`), and those runs set
+# the variant explicitly.
+_BASELINE_PROMPT = "v1-baseline"
 
 CONFIGS: tuple[EvalConfig, ...] = (
-    EvalConfig(name="haiku", provider="anthropic", model="claude-haiku-4-5"),
-    EvalConfig(name="sonnet", provider="anthropic", model="claude-sonnet-5"),
-    EvalConfig(name="opus", provider="anthropic", model="claude-opus-4-8"),
+    EvalConfig(
+        name="haiku", provider="anthropic", model="claude-haiku-4-5", prompt=_BASELINE_PROMPT
+    ),
+    EvalConfig(
+        name="sonnet", provider="anthropic", model="claude-sonnet-5", prompt=_BASELINE_PROMPT
+    ),
+    EvalConfig(name="opus", provider="anthropic", model="claude-opus-4-8", prompt=_BASELINE_PROMPT),
     EvalConfig(
         name="sonnet-thinking",
         provider="anthropic",
@@ -242,13 +263,35 @@ CONFIGS: tuple[EvalConfig, ...] = (
         # raises (ADR-008), which would show up as this configuration "failing"
         # when the real fault is the budget it was given.
         max_output_tokens=8192,
+        prompt=_BASELINE_PROMPT,
     ),
-    EvalConfig(name="gpt-luna", provider="openai", model="gpt-5.6-luna"),
-    EvalConfig(name="gpt-terra", provider="openai", model="gpt-5.6-terra"),
-    EvalConfig(name="gpt-sol", provider="openai", model="gpt-5.6-sol"),
+    EvalConfig(name="gpt-luna", provider="openai", model="gpt-5.6-luna", prompt=_BASELINE_PROMPT),
+    EvalConfig(name="gpt-terra", provider="openai", model="gpt-5.6-terra", prompt=_BASELINE_PROMPT),
+    EvalConfig(name="gpt-sol", provider="openai", model="gpt-5.6-sol", prompt=_BASELINE_PROMPT),
 )
 
 CONFIGS_BY_NAME: dict[str, EvalConfig] = {config.name: config for config in CONFIGS}
 
 #: What `scripts/run_eval.py` sweeps when told nothing more specific.
 DEFAULT_CONFIG_NAMES: tuple[str, ...] = ("haiku", "sonnet", "opus", "sonnet-thinking")
+
+#: The model the prompt sweep holds fixed. `sonnet` without thinking: the
+#: cheapest of the configurations worth shipping, and the one with the most room
+#: left on severity — a prompt effect measured on a model already near its
+#: ceiling is a prompt effect you cannot see. Thinking stays off so the sweep
+#: moves one axis.
+PROMPT_SWEEP_CONFIG = "sonnet"
+
+
+def prompt_variants_of(config: EvalConfig, names: Sequence[str]) -> list[EvalConfig]:
+    """Expand one configuration into one per prompt variant.
+
+    The names are validated against the registry here rather than at the API
+    call: a typo would otherwise run the whole sweep against the default
+    playbook and report it under a variant's name, which is worse than an error
+    because it looks like a result.
+    """
+    unknown = [name for name in names if name not in VARIANTS]
+    if unknown:
+        raise ValueError(f"Unknown prompt variant(s): {', '.join(unknown)}.")
+    return [replace(config, name=f"{config.name}+{name}", prompt=name) for name in names]

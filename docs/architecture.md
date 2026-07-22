@@ -411,3 +411,65 @@ whenever the parameter is omitted. Classifying against a closed enum does not
 need it, and leaving it on would spend part of `max_tokens` on reasoning that
 never reaches the caller while making the per-request cost figures — the thing
 this project exists to report — noisier for no gain.
+
+## ADR-009 — The prompt is a versioned dependency behind a registry
+
+**Status:** accepted (Phase 5)
+
+**Context.** Through Phase 4 the triage playbook was a single file,
+`app/domain/prompts/playbook.md`, loaded directly by `load_playbook()`. That made
+"which prompt do we ship" unanswerable: there was no second prompt to compare the
+first against, and no way to change the prompt without editing the file the whole
+system depends on. Phase 4 could say which *model* to pay for; nothing could say
+which *prompt* to ship, and "a better prompt" is worth measuring precisely because
+prompts, unlike models, are free to change.
+
+The project already had the right shape for this one layer up. The provider is a
+swappable dependency chosen by `LLM_PROVIDER` and resolved in one registry
+(ADR-006), and business code never branches on it. The prompt is the same kind of
+thing: large, stable, chosen per deployment, and load-bearing. It deserved the
+same discipline.
+
+**Decision.** The playbook becomes named, versioned variants under
+`app/domain/prompts/playbook/`, selected by a new `TRIAGE_PROMPT` setting and
+resolved by a `PromptRegistry` that mirrors the provider registry. Selecting a
+prompt is a configuration change, not a code change. Three properties are load-
+bearing and each fails silently if broken, so each is enforced rather than trusted:
+
+1. **Every variant is loaded as-is, never templated.** One interpolated byte
+   invalidates the cache prefix (ADR-003). The registry reads a file and returns
+   it; there is no substitution step to get wrong.
+2. **Every variant clears the caching floor on its own.** `/v1/triage` sends no
+   tools, so a variant is the whole cacheable prefix on that path (ADR-008) and
+   cannot borrow tokens from tool schemas. A variant that drops below ~4096 tokens
+   still runs and still classifies — it just silently stops caching, and then
+   looks expensive for a reason that is not its quality. `tests/test_prompts_live.py`
+   counts every variant with the vendor's tokenizer and fails below the floor.
+3. **A variant's hypothesis and token count live in the registry, not in the
+   prompt bytes.** Meta-commentary inside a cached prefix inflates that one
+   variant's token count and makes the cost comparison unfair; variants have to
+   compete on equal token footing. `measured_tokens` is recorded and dated in the
+   registry (as prices are, ADR-005) and asserted against the live tokenizer.
+
+The prompt text is injected into the services as an argument
+(`build_triage_prompt(request, playbook)`), not fetched inside them. A service
+that read `get_settings()` itself could not be swept over the prompt axis in one
+process, which is exactly what the evaluation runner does — so the router owns the
+lookup, the same way it owns the provider one. `/v1/chat` uses the same variant:
+there is one playbook, and serving chat a prompt nobody measured would make it the
+untested half of the system.
+
+**Consequence.** `/health` reports the active variant alongside the provider and
+model, so a swap can be confirmed without reading logs. An unknown `TRIAGE_PROMPT`
+fails loudly at load time (`UnknownPromptError`) rather than falling back to the
+default and reporting metrics under the wrong name. The evaluation harness gains a
+second axis — Phase 4 sweeps provider × model with the prompt pinned, Phase 5
+sweeps the prompt with the model pinned — and the two never move at once, because
+a difference with two possible causes measures neither.
+
+**How the default was chosen.** The three variants were A/B'd on the held-out
+slice with an LLM-as-judge for the free-text fields; `v2-examples` won a
+statistical tie on accuracy by having the lowest dropped-ticket rate and the best
+free-text quality, at +21% prefix tokens (~+11% per cached ticket). The full
+comparison, the judge's calibration against hand scores, and the trade-off the
+champion accepts are in `docs/evals/prompts.md`.

@@ -13,7 +13,9 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.errors import http_status_for
 from app.api.schemas import TriageRequest, TriageResponse
+from app.core.config import Settings, get_settings
 from app.core.pricing import compute_cost_usd
+from app.domain.prompts import load_playbook
 from app.providers.base import LLMProvider, ProviderError
 from app.providers.registry import get_provider
 from app.services.triage import triage_ticket
@@ -21,16 +23,26 @@ from app.services.triage import triage_ticket
 router = APIRouter(prefix="/v1", tags=["triage"])
 
 ProviderDep = Annotated[LLMProvider, Depends(get_provider)]
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 @router.post("/triage", response_model=TriageResponse)
-async def triage(request: TriageRequest, provider: ProviderDep) -> TriageResponse:
+async def triage(
+    request: TriageRequest,
+    provider: ProviderDep,
+    settings: SettingsDep,
+) -> TriageResponse:
     """Classify a support ticket into a validated `TriageResult`.
 
     This is the endpoint where the two headline features meet: the support
     playbook is sent as the cacheable prefix, so a burst of tickets pays for it
     once, and the response is constrained to the `TriageResult` schema by the
     provider rather than parsed out of free text.
+
+    Which playbook variant is sent is resolved here, from `TRIAGE_PROMPT`, and
+    handed down as text. The router owns that lookup for the same reason it owns
+    the provider one: selecting a prompt is configuration, and the service below
+    should be given its inputs rather than go looking for them (ADR-009).
 
     A failure is an HTTP error, never a degraded result. If the provider could
     not honor the schema there is nothing partially useful to return — a
@@ -42,7 +54,7 @@ async def triage(request: TriageRequest, provider: ProviderDep) -> TriageRespons
     credentials, which is stated in the README rather than papered over.
     """
     try:
-        completion = await triage_ticket(provider, request)
+        completion = await triage_ticket(provider, request, load_playbook(settings.triage_prompt))
     except ProviderError as exc:
         raise HTTPException(status_code=http_status_for(exc), detail=str(exc)) from exc
 

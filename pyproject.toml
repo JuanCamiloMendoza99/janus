@@ -29,10 +29,12 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["app*"]
 
-# The playbook is loaded at runtime as the cacheable prompt prefix, so it has to
-# ship with the package — a wheel without it fails on the first request.
+# The playbook variants are loaded at runtime as the cacheable prompt prefix, so
+# they have to ship with the package — a wheel without them fails on the first
+# request. `playbook/` is a data directory, not a package, so it needs naming
+# explicitly: a bare `*.md` would not reach into it.
 [tool.setuptools.package-data]
-"app.domain.prompts" = ["*.md"]
+"app.domain.prompts" = ["*.md", "playbook/*.md"]
 
 [tool.ruff]
 line-length = 100

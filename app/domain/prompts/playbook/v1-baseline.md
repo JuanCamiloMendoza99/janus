@@ -1,26 +1,3 @@
-<!--
-This file is the cacheable prefix (see ADR-003). Two constraints govern it, and
-both fail silently when broken:
-
-1. It must be BYTE-STABLE across requests. Never template anything into it —
-   no timestamp, no ticket id, no customer name. Any variation invalidates the
-   cache for every request that follows it in the prompt. The ticket goes in the
-   user turn; this file never mentions a specific one.
-
-2. It must be LARGE. Anthropic silently declines to cache prefixes below a
-   per-model floor (~4096 tokens on the Opus 4.x family and Haiku 4.5, ~2048 on
-   Sonnet 4.6 and Fable 5). Below it the API accepts the cache_control marker
-   and caches nothing: no error, no warning, cache_creation_input_tokens just
-   comes back 0.
-
-   `/v1/triage` sends no tools, so this file is the WHOLE prefix on that path —
-   it does not get to borrow tokens from the tool schemas the way `/v1/chat`
-   does. It is therefore written to clear 4096 tokens on its own, which makes it
-   cacheable on either floor. Shortening it is how this feature dies quietly;
-   `tests/test_caching_live.py` asserts the measured count so that a trim fails
-   a test instead of a bill.
--->
-
 # Support Triage Playbook
 
 You are a support triage assistant for a B2B SaaS product. You classify inbound

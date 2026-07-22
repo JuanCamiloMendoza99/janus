@@ -13,6 +13,13 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# The one import `core` takes from `domain`, and it is a constant: the name of
+# the champion prompt variant. Duplicating the string here instead would put the
+# default in two places, and they would disagree the first time the champion
+# changes. `app.domain.prompts.registry` imports nothing from the application, so
+# there is no cycle.
+from app.domain.prompts.registry import DEFAULT_VARIANT
+
 ProviderName = Literal["anthropic", "openai", "fake"]
 
 
@@ -63,6 +70,18 @@ class Settings(BaseSettings):
     # equivalent is `reasoning_effort` and is not wired up, so a vendor-neutral
     # name here would be a lie about half the gateway.
     anthropic_adaptive_thinking: bool = False
+
+    # --- Prompts -----------------------------------------------------------
+    # Which playbook variant is sent as the cacheable prefix. Named rather than
+    # hardcoded so the prompt is a swappable, versioned dependency like the
+    # provider is (ADR-009); the variants and what each one tests live in
+    # `app/domain/prompts/registry.py`. The default is the champion the
+    # evaluation picked — see `docs/evals/prompts.md`.
+    #
+    # It applies to `/v1/chat` too: there is one playbook, and pinning chat to a
+    # different variant than the one under measurement would make the comparison
+    # describe a prompt nothing serves.
+    triage_prompt: str = DEFAULT_VARIANT
 
     # --- Tools -------------------------------------------------------------
     # How many model calls one tool-using request may make before the loop gives

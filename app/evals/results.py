@@ -23,7 +23,10 @@ from app.providers.base import Usage
 
 #: Bumped when the on-disk shape changes incompatibly, so a stale results file
 #: fails loudly instead of being silently misread into a plausible report.
-SCHEMA_VERSION = 1
+#: 2 added the prompt variant to each run's configuration (Phase 5): a results
+#: file that does not say which playbook produced it cannot be compared against
+#: one that does.
+SCHEMA_VERSION = 2
 
 
 def dump_runs(runs: Sequence[RunResult], path: Path) -> None:
@@ -56,6 +59,7 @@ def _run_to_dict(run: RunResult) -> dict[str, Any]:
             "model": run.config.model,
             "adaptive_thinking": run.config.adaptive_thinking,
             "max_output_tokens": run.config.max_output_tokens,
+            "prompt": run.config.prompt,
         },
         "started_at": run.started_at.isoformat(),
         "finished_at": run.finished_at.isoformat(),

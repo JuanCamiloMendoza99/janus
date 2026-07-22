@@ -1,6 +1,12 @@
 """Run the golden dataset through one or more configurations.
 
     python scripts/run_eval.py --configs haiku sonnet opus sonnet-thinking
+    python scripts/run_eval.py --configs sonnet --prompts v1-baseline v3-terse
+
+The first form sweeps the provider x model axis (Phase 4); the second holds the
+model fixed and sweeps the prompt axis (Phase 5). Both at once is allowed and
+almost never what you want: with two axes moving, a difference has two
+explanations.
 
 This spends real money. `--max-spend` is enforced between batches and defaults
 to a cap well above a normal sweep, so a runaway costs dollars rather than
@@ -19,6 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.core.config import get_settings
+from app.domain.prompts import VARIANTS
 from app.evals.dataset import DEFAULT_DATASET_PATH, load_tickets, select
 from app.evals.results import dump_runs
 from app.evals.runner import (
@@ -27,6 +34,7 @@ from app.evals.runner import (
     BudgetExceeded,
     EvalConfig,
     RunResult,
+    prompt_variants_of,
     run_sweep,
 )
 from app.evals.scoring import score
@@ -43,6 +51,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=list(DEFAULT_CONFIG_NAMES),
         choices=sorted(CONFIGS_BY_NAME),
         help="Configurations to sweep.",
+    )
+    parser.add_argument(
+        "--prompts",
+        nargs="+",
+        default=None,
+        choices=sorted(VARIANTS),
+        help=(
+            "Playbook variants to sweep. Each selected configuration is expanded "
+            "into one run per variant. Default: whatever TRIAGE_PROMPT says."
+        ),
     )
     parser.add_argument(
         "--split",
@@ -81,11 +99,19 @@ def _runnable(configs: list[EvalConfig]) -> list[EvalConfig]:
     return runnable
 
 
+def _selected(config_names: list[str], prompt_names: list[str] | None) -> list[EvalConfig]:
+    """Resolve the named configurations, crossed with the prompt axis if given."""
+    configs = [CONFIGS_BY_NAME[name] for name in config_names]
+    if prompt_names is None:
+        return configs
+    return [expanded for config in configs for expanded in prompt_variants_of(config, prompt_names)]
+
+
 def _summarise(runs: list[RunResult]) -> None:
     for run in runs:
         metrics = score(run.outcomes)
         print(
-            f"  {run.config.name:<16} "
+            f"  {run.config.name:<24} "
             f"classification {metrics.classification_accuracy:>6.1%}  "
             f"failures {metrics.failures:>2}  "
             f"p50 {metrics.latency_p50_s:>5.1f}s  "
@@ -97,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
 
     tickets = select(load_tickets(args.dataset), None if args.split == "all" else args.split)
-    configs = _runnable([CONFIGS_BY_NAME[name] for name in args.configs])
+    configs = _runnable(_selected(args.configs, args.prompts))
     if not configs:
         print("Nothing to run: no configuration had usable credentials.", file=sys.stderr)
         return 1
@@ -120,7 +146,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n{exc}", file=sys.stderr)
         return 2
 
-    destination = args.out / f"results-{datetime.now(UTC):%Y-%m-%d}.json"
+    # Prompt sweeps get their own filename so a Phase 5 run cannot overwrite the
+    # provider comparison the report in `docs/evals/README.md` is derived from.
+    stem = "results-prompts" if args.prompts else "results"
+    destination = args.out / f"{stem}-{args.split}-{datetime.now(UTC):%Y-%m-%d}.json"
     dump_runs(runs, destination)
 
     print()

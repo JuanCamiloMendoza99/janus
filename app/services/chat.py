@@ -9,13 +9,12 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Sequence
 
 from app.api.schemas import ChatMessage
-from app.domain.prompts import load_playbook
 from app.providers.base import LLMProvider, Message, Prompt, StreamEvent
 from app.services.tool_loop import run_tool_loop
 from app.tools.registry import get_tool_specs
 
 
-def build_chat_prompt(messages: Sequence[ChatMessage]) -> Prompt:
+def build_chat_prompt(messages: Sequence[ChatMessage], playbook: str) -> Prompt:
     """Turn a client's conversation into a `Prompt`.
 
     The playbook goes in `cacheable_prefix`, never in `system`: it is the large,
@@ -24,9 +23,14 @@ def build_chat_prompt(messages: Sequence[ChatMessage]) -> Prompt:
     follows (ADR-003). `system` stays empty precisely because there is nothing
     per-request to say — the moment there is, it goes there and not in the
     prefix.
+
+    Which variant the text came from is the caller's decision (ADR-009). Chat
+    gets the same one triage does: there is one playbook, and serving chat a
+    variant nobody measured would make `/v1/chat` the untested half of the
+    prompt.
     """
     return Prompt(
-        cacheable_prefix=load_playbook(),
+        cacheable_prefix=playbook,
         system=None,
         messages=[Message(role=message.role, content=message.content) for message in messages],
     )
@@ -37,6 +41,7 @@ def stream_chat(
     messages: Sequence[ChatMessage],
     use_tools: bool,
     max_iterations: int,
+    playbook: str,
 ) -> AsyncIterator[StreamEvent]:
     """Stream one chat exchange, with the tool loop if tools are enabled.
 
@@ -47,7 +52,7 @@ def stream_chat(
     """
     return run_tool_loop(
         provider=provider,
-        prompt=build_chat_prompt(messages),
+        prompt=build_chat_prompt(messages, playbook),
         tools=get_tool_specs() if use_tools else (),
         max_iterations=max_iterations,
     )
