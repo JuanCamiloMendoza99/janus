@@ -112,6 +112,7 @@ def score(outcomes: Sequence[TicketOutcome]) -> Metrics:
 
     total = len(outcomes)
     failures = sum(1 for outcome in outcomes if outcome.failed)
+    calibration = _calibration(outcomes)
 
     return Metrics(
         tickets=total,
@@ -129,8 +130,8 @@ def score(outcomes: Sequence[TicketOutcome]) -> Metrics:
         total_cost_usd=sum(o.cost_usd for o in outcomes),
         cost_per_1000_tickets_usd=sum(o.cost_usd for o in outcomes) / total * 1000,
         cache_hit_rate=_cache_hit_rate(outcomes),
-        calibration=_calibration(outcomes),
-        expected_calibration_error=_expected_calibration_error(outcomes),
+        calibration=calibration,
+        expected_calibration_error=_expected_calibration_error(outcomes, calibration),
     )
 
 
@@ -291,7 +292,10 @@ def _in_bucket(confidence: float, lower: float, upper: float) -> bool:
     return lower <= confidence < upper
 
 
-def _expected_calibration_error(outcomes: Sequence[TicketOutcome]) -> float:
+def _expected_calibration_error(
+    outcomes: Sequence[TicketOutcome],
+    calibration: Sequence[CalibrationBucket],
+) -> float:
     """Weighted average gap between stated confidence and observed accuracy.
 
     0 is perfect calibration. A model at 0.95 confidence that is right 60% of the
@@ -304,6 +308,6 @@ def _expected_calibration_error(outcomes: Sequence[TicketOutcome]) -> float:
         return 0.0
     return sum(
         bucket.count / len(scored) * abs(bucket.accuracy - bucket.mean_confidence)
-        for bucket in _calibration(outcomes)
+        for bucket in calibration
         if bucket.count
     )
