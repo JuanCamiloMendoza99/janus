@@ -12,6 +12,7 @@ from app.api import chat, triage, usage
 from app.api.schemas import HealthResponse
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
+from app.domain.prompts import get_variant
 from app.observability.middleware import CostLoggingMiddleware
 from app.providers.base import LLMProvider
 from app.providers.registry import get_provider
@@ -50,11 +51,13 @@ ProviderDep = Annotated[LLMProvider, Depends(get_provider)]
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])
 async def health(settings: SettingsDep, provider: ProviderDep) -> HealthResponse:
-    """Liveness check that also reports which provider is wired in.
+    """Liveness check that also reports which provider, model and prompt are wired in.
 
-    Reporting the active provider and model is the point: the project's core
-    claim is that these change by environment variable alone, and this endpoint
-    is how you confirm the swap took effect without reading the logs.
+    Reporting all three is the point: the project's core claim is that they
+    change by environment variable alone, and this endpoint is how you confirm a
+    swap took effect without reading the logs. `prompt` is validated by
+    `get_variant()`, so an unknown `TRIAGE_PROMPT` surfaces here rather than on
+    the first triage request.
     """
     return HealthResponse(
         status="ok",
@@ -62,4 +65,5 @@ async def health(settings: SettingsDep, provider: ProviderDep) -> HealthResponse
         environment=settings.environment,
         provider=provider.name,
         model=provider.model,
+        prompt=get_variant(settings.triage_prompt).name,
     )

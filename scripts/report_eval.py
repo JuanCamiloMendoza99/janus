@@ -1,4 +1,4 @@
-"""Render a sweep's results as the markdown tables in `docs/evals/README.md`.
+"""Render a provider sweep's results as the markdown tables in `docs/evals/README.md`.
 
     python scripts/report_eval.py
 
@@ -7,6 +7,8 @@ the headline finding, the recommendation, the trade-off it accepts — is writte
 by a human, because a script cannot decide that a cheaper model losing four
 points of severity accuracy is or is not worth the saving. That judgement is the
 deliverable; the tables are just evidence for it.
+
+Table rendering lives in `app/evals/report.py`, shared with the prompt report.
 """
 
 from __future__ import annotations
@@ -14,70 +16,29 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from app.evals.report import (
+    BEGIN,
+    END,
+    calibration_tables,
+    comparison_table,
+    skeleton,
+    splice,
+)
 from app.evals.results import load_runs
 from app.evals.runner import RunResult
 from app.evals.scoring import Metrics, score
 
-BEGIN = "<!-- BEGIN GENERATED -->"
-END = "<!-- END GENERATED -->"
-
 DEFAULT_DIR = Path("docs/evals")
-
-SKELETON = f"""# Evaluation
-
-_Write the headline finding and the recommendation here._
-
-{BEGIN}
-{END}
-"""
 
 
 def _latest_results(directory: Path) -> Path:
-    candidates = sorted(directory.glob("results-*.json"))
+    # Only the provider sweep, never a prompt sweep — those get their own report.
+    candidates = sorted(
+        p for p in directory.glob("results-*.json") if not p.name.startswith("results-prompts-")
+    )
     if not candidates:
         raise SystemExit(f"No results-*.json in {directory}. Run scripts/run_eval.py first.")
     return candidates[-1]
-
-
-def _comparison_table(rows: list[tuple[RunResult, Metrics]]) -> str:
-    header = (
-        "| Configuration | Model | Thinking | Classification | Category | Severity | "
-        "Next action | Escalate FP | Escalate FN | PII recall | PII prec. | "
-        "p50 | p95 | $/1k tickets | Cache hit | ECE | Failures |\n"
-        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
-    )
-    body = "".join(
-        f"| `{run.config.name}` | `{run.config.model}` "
-        f"| {'adaptive' if run.config.adaptive_thinking else 'off'} "
-        f"| **{m.classification_accuracy:.1%}** | {m.category_accuracy:.1%} "
-        f"| {m.severity_accuracy:.1%} | {m.next_action_accuracy:.1%} "
-        f"| {m.escalation_false_positive_rate:.1%} | {m.escalation_false_negative_rate:.1%} "
-        f"| {m.pii_recall:.1%} | {m.pii_precision:.1%} "
-        f"| {m.latency_p50_s:.1f}s | {m.latency_p95_s:.1f}s "
-        f"| ${m.cost_per_1000_tickets_usd:.2f} | {m.cache_hit_rate:.1%} "
-        f"| {m.expected_calibration_error:.3f} | {m.failures} |\n"
-        for run, m in rows
-    )
-    return header + body
-
-
-def _calibration_tables(rows: list[tuple[RunResult, Metrics]]) -> str:
-    parts: list[str] = []
-    for run, metrics in rows:
-        lines = [
-            f"**`{run.config.name}`** — ECE {metrics.expected_calibration_error:.3f}\n",
-            "| Confidence | Tickets | Mean confidence | Accuracy |",
-            "|---|---:|---:|---:|",
-        ]
-        for bucket in metrics.calibration:
-            if not bucket.count:
-                continue
-            lines.append(
-                f"| {bucket.lower:.1f}–{bucket.upper:.1f} | {bucket.count} "
-                f"| {bucket.mean_confidence:.2f} | {bucket.accuracy:.1%} |"
-            )
-        parts.append("\n".join(lines))
-    return "\n\n".join(parts)
 
 
 def _generated_block(rows: list[tuple[RunResult, Metrics]], source: Path) -> str:
@@ -97,7 +58,7 @@ def _generated_block(rows: list[tuple[RunResult, Metrics]], source: Path) -> str
             "",
             "## Comparison",
             "",
-            _comparison_table(rows),
+            comparison_table(rows),
             "## Confidence calibration",
             "",
             "Is a low confidence score actually a warning? Accuracy is measured "
@@ -105,21 +66,11 @@ def _generated_block(rows: list[tuple[RunResult, Metrics]], source: Path) -> str
             "all correct — because that is what the field claims to be confident "
             "about. Failed requests carry no confidence and are excluded here only.",
             "",
-            _calibration_tables(rows),
+            calibration_tables(rows),
             "",
             END,
         ]
     )
-
-
-def _splice(existing: str, block: str) -> str:
-    if BEGIN not in existing or END not in existing:
-        raise SystemExit(
-            f"Report is missing the {BEGIN} / {END} markers; refusing to overwrite it."
-        )
-    head, _, rest = existing.partition(BEGIN)
-    _, _, tail = rest.partition(END)
-    return f"{head}{block}{tail}"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -135,8 +86,8 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"{source} contains no runs.")
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    existing = args.out.read_text(encoding="utf-8") if args.out.exists() else SKELETON
-    args.out.write_text(_splice(existing, _generated_block(rows, source)), encoding="utf-8")
+    existing = args.out.read_text(encoding="utf-8") if args.out.exists() else skeleton()
+    args.out.write_text(splice(existing, _generated_block(rows, source)), encoding="utf-8")
 
     print(f"{source} -> {args.out}")
     return 0

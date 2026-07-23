@@ -40,6 +40,12 @@ dead code, no placeholder hacks left behind.
    architectural rule the whole project rests on. If you find yourself wanting an
    `if provider == "anthropic"` outside `app/providers/`, the domain model needs
    extending instead.
+7. **The playbook is chosen by config, never hardcoded.** It is versioned variants
+   behind `app/domain/prompts/registry.py`, selected by `TRIAGE_PROMPT` (ADR-009).
+   Every variant is loaded byte-for-byte as-is (never templated) and must clear the
+   caching floor; its hypothesis and token count live in the registry, not in the
+   prompt bytes. `load_playbook(name)` returns the text; services take it as an
+   argument so the eval harness can sweep the prompt axis.
 
 ## Current status
 
@@ -63,10 +69,23 @@ dead code, no placeholder hacks left behind.
   addendum. Adds ADR-008, `app/api/errors.py`, `app/services/triage.py`,
   `tests/test_triage.py` and `tests/test_caching_live.py`. 85 tests green on the
   fake, 5 more behind `-m live`, ruff clean.
-- ⬜ Phase 4 — Evaluation: `docs/plans/phase-4-evals.md`
-- ⬜ Phase 5 — Prompt engineering & optimization: `docs/plans/phase-5-prompt-optimization.md`
-  (versioned playbook variants behind a prompt registry, A/B'd on Phase 4's golden
-  set, with LLM-as-judge for the free-text fields; introduces ADR-009)
+- ✅ **Phase 4 — Evaluation** (done 2026-07-22): `docs/plans/phase-4-evals.md`.
+  The golden set (`evals/tickets.jsonl`, 55 tickets, 38 train / 17 holdout),
+  `app/evals/` (dataset, runner, scoring, results) and `scripts/run_eval.py` /
+  `scripts/report_eval.py`. Adds `ANTHROPIC_ADAPTIVE_THINKING`. Measured
+  2026-07-22 for $1.62: haiku 60.0% classification, sonnet 70.9%, opus 74.5%,
+  sonnet+thinking 81.8% (the recommendation — best accuracy and calibration, and
+  cheaper than opus). Recommendation and caveats in `docs/evals/README.md`.
+- ✅ **Phase 5 — Prompt engineering & optimization** (done 2026-07-22):
+  `docs/plans/phase-5-prompt-optimization.md`. The playbook is now versioned
+  variants under `app/domain/prompts/playbook/` behind a `PromptRegistry`, selected
+  by `TRIAGE_PROMPT`; `/health` reports the active one. Three variants A/B'd on the
+  holdout with an LLM-as-judge (`app/evals/judge.py`, `claude-opus-4-8`) for the
+  free-text fields, calibrated against `evals/judge_calibration.jsonl` (78% exact
+  agreement). Champion `v2-examples`; report in `docs/evals/prompts.md`. Adds
+  ADR-009, `app/evals/report.py`, `scripts/judge_eval.py` /
+  `scripts/report_prompt_eval.py`. Sweep + judge cost $0.51. Results schema bumped
+  to 2 (config now carries `prompt`).
 - ✅ **OpenAI model id resolved.** `OPENAI_MODEL` now defaults to `gpt-5.6-terra`
   (mid tier), with the id and rates verified against OpenAI's pricing page on
   2026-07-20 rather than carried from memory. The `.env.example` placeholder is
@@ -130,11 +149,14 @@ app/core/pricing.py    Dated $/MTok table — the basis of every cost figure
 app/api/               Routers, one module per endpoint + schemas.py + errors.py
 app/providers/base.py  THE SEAM: domain model + LLMProvider Protocol
 app/providers/         Adapters: anthropic.py, openai.py, fake.py, registry.py
-app/domain/            TriageResult + prompts/playbook.md (the cacheable prefix)
+app/domain/            TriageResult + prompts/ (registry + playbook/*.md variants)
 app/services/          Prompt assembly + the tool loop (what the routers delegate to)
                        chat.py (the loop) and triage.py (the constrained call)
 app/tools/             Tool specs, handlers, dispatch, the KB corpus
 app/observability/     ledger.py (per-request usage), middleware.py (cost log)
+app/evals/             The eval harness: dataset, runner, scoring, results
+evals/                 The golden dataset (dev tooling — not shipped in the wheel)
+scripts/               CLI entrypoints for the harness (argparse + print only)
 tests/                 Pytest — runs entirely on the fake provider
 docs/architecture.md   ADRs (append-only record of decisions)
 docs/plans/            Per-phase implementation plans (source of truth for what to build)
@@ -150,6 +172,9 @@ curl localhost:8000/health              # reports the active provider and model
 pytest                                  # default suite, no credentials needed
 pytest -m live                          # acceptance against a real vendor — spends money
 ruff check . && ruff format --check .
+
+python scripts/run_eval.py --configs sonnet   # eval sweep — spends money, capped by --max-spend
+python scripts/report_eval.py                 # regenerate the tables in docs/evals/
 ```
 
 ## Conventions

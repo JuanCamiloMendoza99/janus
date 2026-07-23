@@ -1,0 +1,1484 @@
+{
+  "runs": [
+    {
+      "config": {
+        "adaptive_thinking": false,
+        "max_output_tokens": null,
+        "model": "claude-sonnet-5",
+        "name": "sonnet+v1-baseline",
+        "prompt": "v1-baseline",
+        "provider": "anthropic"
+      },
+      "finished_at": "2026-07-22T22:42:30.424547+00:00",
+      "outcomes": [
+        {
+          "cost_usd": 0.006512100000000001,
+          "error": null,
+          "expected": {
+            "category": "billing",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "high"
+          },
+          "latency_s": 6.9901600999996845,
+          "predicted": {
+            "category": "billing",
+            "confidence": 0.75,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Billing owns refunds; no evidence of ongoing money movement error, just a missing promised refund, so high rather than critical. Tone reads as negative and worn down, not hostile or accusatory, so not angry. No escalation trigger fires: nothing critical, not angry+high, no data or security issue. Repeated contact and staleness make this urgent for a human to unblock, but not page-worthy on its own.  Confidence is moderate since I cannot verify whether the refund was actually approved or just discussed.",
+            "sentiment": "negative",
+            "severity": "high",
+            "summary": "Customer reports a promised refund on invoice INV-2231 has not arrived after three prior contacts."
+          },
+          "ticket_id": "T-036",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 94,
+            "model": "claude-sonnet-5",
+            "output_tokens": 262
+          }
+        },
+        {
+          "cost_usd": 0.0059511,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 16.42251249999981,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.85,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "The software is broken, not the price: a CSP misconfiguration blocks a script only in Firefox, so this is technical rather than billing despite involving the payment page. Workaround exists via Chrome, capping severity at medium. Neutral, factual tone, no PII in the body.confident this is a reproducible browser-specific defect an engineer can act on.<br/>",
+            "sentiment": "neutral",
+            "severity": "medium",
+            "summary": "Payment page renders blank in Firefox 141 due to a CSP error blocking a CDN script; works fine in Chrome."
+          },
+          "ticket_id": "T-037",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 92,
+            "model": "claude-sonnet-5",
+            "output_tokens": 225
+          }
+        },
+        {
+          "cost_usd": 0.0059871,
+          "error": null,
+          "expected": {
+            "category": "account_access",
+            "contains_pii": false,
+            "next_action": "escalate",
+            "severity": "critical"
+          },
+          "latency_s": 5.387235900000178,
+          "predicted": {
+            "category": "account_access",
+            "confidence": 0.9,
+            "contains_pii": false,
+            "next_action": "escalate",
+            "reasoning": "Total loss of access with no workaround: the only admin is locked out and no other user can regain control, so the product is fully unusable for this account. This matches the critical-blast-radius rule even though only one person is affected, because there is no path back in without support intervention. No pasted personal data in the body beyond the sender's own situation.','next_action escalate because access is completely and irrecoverably blocked.",
+            "sentiment": "negative",
+            "severity": "critical",
+            "summary": "Sole administrator lost MFA device and recovery codes, no one else can promote a new admin, entire account is blocked."
+          },
+          "ticket_id": "T-038",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 104,
+            "model": "claude-sonnet-5",
+            "output_tokens": 225
+          }
+        },
+        {
+          "cost_usd": 0.0054681,
+          "error": null,
+          "expected": {
+            "category": "feature_request",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "low"
+          },
+          "latency_s": 5.227971900000284,
+          "predicted": {
+            "category": "feature_request",
+            "confidence": 0.9,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "There is a concrete missing capability (bulk edit) behind the frustration, so this is a feature_request rather than a complaint. No defect exists \u2014 the product works as designed but lacks this feature \u2014 so severity is low despite the angry tone. Anger does not raise severity or warrant escalation per policy.'",
+            "sentiment": "angry",
+            "severity": "low",
+            "summary": "Customer wants a bulk edit capability for records; currently must edit 200 rows individually."
+          },
+          "ticket_id": "T-039",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 101,
+            "model": "claude-sonnet-5",
+            "output_tokens": 191
+          }
+        },
+        {
+          "cost_usd": 0,
+          "error": "[anthropic] The model's response broke the schema's constraints on: reasoning. The API treats bounds like max_length as advice rather than a constraint, so the prompt has to state them too.",
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "escalate",
+            "severity": "critical"
+          },
+          "latency_s": 11.522298400000182,
+          "predicted": null,
+          "ticket_id": "T-040",
+          "usage": null
+        },
+        {
+          "cost_usd": 0.0063771,
+          "error": null,
+          "expected": {
+            "category": "billing",
+            "contains_pii": true,
+            "next_action": "escalate",
+            "severity": "critical"
+          },
+          "latency_s": 5.492510499999753,
+          "predicted": {
+            "category": "billing",
+            "confidence": 0.85,
+            "contains_pii": true,
+            "next_action": "escalate",
+            "reasoning": "A billing document containing another company's address and bank details was sent to the wrong customer \u2014 a data exposure across accounts, so severity is critical regardless of the calm tone. Escalation policy fires because data was exposed to the wrong party. contains_pii is true: bank details and address of a third party are in the body. Some uncertainty remains since the customer only assumes their own invoice went the other way, but the confirmed exposure alone justifies the classification.",
+            "sentiment": "neutral",
+            "severity": "critical",
+            "summary": "Customer received another company's invoice PDF (Halvorsen Logistics) containing their address and bank details, implying a cross-account data mix-up."
+          },
+          "ticket_id": "T-041",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 99,
+            "model": "claude-sonnet-5",
+            "output_tokens": 252
+          }
+        },
+        {
+          "cost_usd": 0.0057561,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "low"
+          },
+          "latency_s": 6.202729099999942,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.85,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "A reproducible UI defect with a clear workaround (rotate device), so technical rather than complaint, and low severity since it's cosmetic with a trivial workaround. Tone is factual and matter-of-fact, so neutral. No knowledge base check available to confirm this is documented, so routed to a human rather than auto-replied.",
+            "sentiment": "neutral",
+            "severity": "low",
+            "summary": "On iPhone portrait mode, a tooltip on the billing form visually covers the save button; rotating to landscape works around it."
+          },
+          "ticket_id": "T-042",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 92,
+            "model": "claude-sonnet-5",
+            "output_tokens": 212
+          }
+        },
+        {
+          "cost_usd": 0.0056121,
+          "error": null,
+          "expected": {
+            "category": "other",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "low"
+          },
+          "latency_s": 5.934858200000235,
+          "predicted": {
+            "category": "other",
+            "confidence": 0.9,
+            "contains_pii": false,
+            "next_action": "close",
+            "reasoning": "This is a business development inquiry, not a support ticket, so it falls under 'other'. No product problem or actionable support task exists, so closing is appropriate rather than routing to a support queue. Sender's own identity is envelope info, not PII.rn.rn(This should be forwarded to sales/partnerships outside the support triage flow.)",
+            "sentiment": "neutral",
+            "severity": "low",
+            "summary": "Consultancy requests contact for potential Nordics reseller partnership; not a support issue."
+          },
+          "ticket_id": "T-043",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 99,
+            "model": "claude-sonnet-5",
+            "output_tokens": 201
+          }
+        },
+        {
+          "cost_usd": 0.0066021000000000005,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "close",
+            "severity": "medium"
+          },
+          "latency_s": 5.865056900000127,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.75,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Explicit duplicate of an already-reported issue (ticket 8891), so this should not be escalated again as if new \u2014 a human should confirm it's linked to the existing incident and merge/close as appropriate. Webhook signature failing on every delivery is a core integration workflow broken for this customer, hence high severity, but no evidence of blast radius beyond one account or of data/money impact, so not critical. Tone is factual, not angry. Confidence is moderate since I cannot verify the status of ticket 8891 or whether it was already escalated.",
+            "sentiment": "neutral",
+            "severity": "high",
+            "summary": "Duplicate of ticket 8891: webhook signature verification fails on every delivery."
+          },
+          "ticket_id": "T-044",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 99,
+            "model": "claude-sonnet-5",
+            "output_tokens": 267
+          }
+        },
+        {
+          "cost_usd": 0.006068100000000001,
+          "error": null,
+          "expected": {
+            "category": "account_access",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 6.096523700000034,
+          "predicted": {
+            "category": "account_access",
+            "confidence": 0.75,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Access-control request tied to an offboarding scenario; core workflow (file recovery) is blocked for one user but likely has an admin-side workaround (ownership transfer) so not high. Needs a human because disabling MFA on someone else's account requires identity verification and policy checks, not automation. No PII in body \u2014 no names, emails or identifiers pasted.','confidence reflects missing detail on whether an account admin already has access alternatives.",
+            "sentiment": "neutral",
+            "severity": "medium",
+            "summary": "Customer requests MFA disable/reset on a departed employee's account to recover owned files."
+          },
+          "ticket_id": "T-045",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 86,
+            "model": "claude-sonnet-5",
+            "output_tokens": 234
+          }
+        },
+        {
+          "cost_usd": 0.0066351000000000005,
+          "error": null,
+          "expected": {
+            "category": "other",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 6.4852678000002015,
+          "predicted": {
+            "category": "complaint",
+            "confidence": 0.6,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "No reproducible defect and no evidence beyond a secondhand rumor, so this isn't technical and doesn't meet the bar for escalation per the unverified-claims rule. Medium severity to prompt verification rather than critical, since there's no confirmation of an actual breach. Routed to human rather than auto-reply because it needs a considered, possibly security-team response, not a KB answer. Chose complaint over other since the concern, though unverified, is about service trust; could also be read as account_access/security inquiry.'}",
+            "sentiment": "negative",
+            "severity": "medium",
+            "summary": "Customer heard secondhand rumor of a breach on a forum and asks whether their data is safe; no evidence provided."
+          },
+          "ticket_id": "T-046",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 90,
+            "model": "claude-sonnet-5",
+            "output_tokens": 271
+          }
+        },
+        {
+          "cost_usd": 0.0076791,
+          "error": null,
+          "expected": {
+            "category": "billing",
+            "contains_pii": false,
+            "next_action": "escalate",
+            "severity": "high"
+          },
+          "latency_s": 11.348005300000295,
+          "predicted": {
+            "category": "billing",
+            "confidence": 0.85,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Billing dispute: seat count used for pricing does not match actual users, a sustained overcharge (~4 months x 39 EUR x4 seats). This is billing, not technical, since the price/seat reconciliation is wrong, not the software. High severity due to accumulating financial impact over multiple months, but not critical since it's a single account and recoverable via credit/refund. Tone is factual and mildly frustrated, not hostile, so negative not angry. No escalation trigger: money moved incorrectly but at low/moderate scale and recoverable through normal billing correction, not an active loss or breach.no PII present beyond account facts.confidence high but not maximal since exact seat history unverified.no PII.no PII.no PII.no PII.",
+            "sentiment": "negative",
+            "severity": "high",
+            "summary": "Customer billed for 9 seats instead of 5 for four months after removing four users in March; requests correction of overcharge."
+          },
+          "ticket_id": "T-047",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 88,
+            "model": "claude-sonnet-5",
+            "output_tokens": 341
+          }
+        },
+        {
+          "cost_usd": 0.0055461,
+          "error": null,
+          "expected": {
+            "category": "other",
+            "contains_pii": false,
+            "next_action": "request_more_info",
+            "severity": "low"
+          },
+          "latency_s": 5.523406499999965,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.25,
+            "contains_pii": false,
+            "next_action": "request_more_info",
+            "reasoning": "No indication of what is slow, which feature or endpoint, or since when. Could be a minor UI lag or a serious performance regression, so I cannot set severity confidently. Terse phrasing is graded neutral, not negative, per the no-tone-from-terseness rule. Requesting more info rather than guessing category or severity.','next_action':'request_more_info'}",
+            "sentiment": "neutral",
+            "severity": "low",
+            "summary": "Customer reports something is slow with no product area, endpoint, or timing specified."
+          },
+          "ticket_id": "T-048",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 42,
+            "model": "claude-sonnet-5",
+            "output_tokens": 208
+          }
+        },
+        {
+          "cost_usd": 0.005957100000000001,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 5.482895399999961,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.75,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Reproducible defect (duplicate webhook delivery with same event id), so technical rather than complaint. Severity is medium, not high: the customer already has a working deduplication workaround in place and no data loss or blocked workflow is reported. Tone is factual, no PII present. Not urgent enough to escalate; routed to a human for investigation into the delivery logic.",
+            "sentiment": "neutral",
+            "severity": "medium",
+            "summary": "Webhooks are delivering duplicate events with identical event ids roughly 200ms apart, requiring customer-side dedup."
+          },
+          "ticket_id": "T-049",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 94,
+            "model": "claude-sonnet-5",
+            "output_tokens": 225
+          }
+        },
+        {
+          "cost_usd": 0.0071601,
+          "error": null,
+          "expected": {
+            "category": "complaint",
+            "contains_pii": false,
+            "next_action": "escalate",
+            "severity": "high"
+          },
+          "latency_s": 7.71928650000018,
+          "predicted": {
+            "category": "complaint",
+            "confidence": 0.75,
+            "contains_pii": false,
+            "next_action": "escalate",
+            "reasoning": "No specific technical defect is described, only a contractual SLA breach claim with a legal team copied \u2014 this is a contractual/legal consequence, which mandates escalation regardless of severity. Categorized as complaint since there's no reproducible bug to hand an engineer, just a dispute over metrics and credits; billing could also fit once credits are calculated, but the immediate issue is the SLA dispute itself. Severity set to high given the named legal consequence and financial claim, not critical since no outage is ongoing now. Confidence moderate because the underlying cause of the downtime is not described.",
+            "sentiment": "negative",
+            "severity": "high",
+            "summary": "Enterprise customer reports June uptime of 97.2% versus a contractual 99.9% SLA and states legal has been copied, demanding service credits."
+          },
+          "ticket_id": "T-050",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 125,
+            "model": "claude-sonnet-5",
+            "output_tokens": 299
+          }
+        },
+        {
+          "cost_usd": 0.005114100000000001,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "request_more_info",
+            "severity": "low"
+          },
+          "latency_s": 5.272233500000311,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.3,
+            "contains_pii": false,
+            "next_action": "request_more_info",
+            "reasoning": "Real defect reported but unactionable as written: no error text, no affected page or workflow, no account identifier. Cannot assess true severity or route to a team without more detail, so defaulting to low severity and requesting specifics rather than guessing at scope.'",
+            "sentiment": "neutral",
+            "severity": "low",
+            "summary": "Customer reports recurring save error with no error message, screen, or reproduction steps provided."
+          },
+          "ticket_id": "T-054",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 68,
+            "model": "claude-sonnet-5",
+            "output_tokens": 174
+          }
+        },
+        {
+          "cost_usd": 0.006251100000000001,
+          "error": null,
+          "expected": {
+            "category": "complaint",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 5.583251300000029,
+          "predicted": {
+            "category": "complaint",
+            "confidence": 0.85,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "No defect or concrete ask exists here \u2014 this is dissatisfaction with a deliberate pricing decision, so it is a complaint, not billing or feature_request. Severity is low: no operational impact, just objection and a stated intent to review alternatives. Tone is negative but measured, not angry or threatening legal action, so no escalation trigger applies despite the cancellation-adjacent language.</reasoning",
+            "sentiment": "negative",
+            "severity": "low",
+            "summary": "Customer objects to a 22% Growth-tier price increase at renewal and is reviewing alternatives; no defect or specific request involved."
+          },
+          "ticket_id": "T-055",
+          "usage": {
+            "cache_read_tokens": 7667,
+            "cache_write_tokens": 0,
+            "input_tokens": 117,
+            "model": "claude-sonnet-5",
+            "output_tokens": 240
+          }
+        }
+      ],
+      "split": "holdout",
+      "started_at": "2026-07-22T22:41:41.733205+00:00"
+    },
+    {
+      "config": {
+        "adaptive_thinking": false,
+        "max_output_tokens": null,
+        "model": "claude-sonnet-5",
+        "name": "sonnet+v2-examples",
+        "prompt": "v2-examples",
+        "provider": "anthropic"
+      },
+      "finished_at": "2026-07-22T22:43:23.915474+00:00",
+      "outcomes": [
+        {
+          "cost_usd": 0.0069567000000000006,
+          "error": null,
+          "expected": {
+            "category": "billing",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "high"
+          },
+          "latency_s": 6.11227289999988,
+          "predicted": {
+            "category": "billing",
+            "confidence": 0.75,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Billing category: a specific promised refund not processed over three weeks and three follow-ups indicates a stalled remedy, not a machine defect. High severity given the repeated escalation attempts and elapsed time, though not critical since one invoice/customer and no incorrect money movement is confirmed yet, just a missing one. No PII beyond invoice number. Not escalating since this is unverified as money moved incorrectly \u2014 it's a missing refund, and no legal/contractual consequence stated; a human should verify and process.'",
+            "sentiment": "negative",
+            "severity": "high",
+            "summary": "Customer reports a promised refund for invoice INV-2231 has not arrived despite three prior contacts."
+          },
+          "ticket_id": "T-036",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 94,
+            "model": "claude-sonnet-5",
+            "output_tokens": 264
+          }
+        },
+        {
+          "cost_usd": 0.006515700000000001,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 5.750460400000065,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.85,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Software defect (CSP misconfiguration) rather than a billing amount issue, so technical per the billing-vs-technical rule: the page is broken, not the price. Chrome works, giving a workaround, so severity is capped below high; medium fits a browser-specific rendering bug with an alternate path. Neutral, factual tone. Routine engineering fix, not urgent enough to escalate.",
+            "sentiment": "neutral",
+            "severity": "medium",
+            "summary": "Payment page renders blank in Firefox 141 due to a CSP error blocking a CDN script; Chrome unaffected."
+          },
+          "ticket_id": "T-037",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 92,
+            "model": "claude-sonnet-5",
+            "output_tokens": 235
+          }
+        },
+        {
+          "cost_usd": 0.006161700000000001,
+          "error": null,
+          "expected": {
+            "category": "account_access",
+            "contains_pii": false,
+            "next_action": "escalate",
+            "severity": "critical"
+          },
+          "latency_s": 5.2821413000001485,
+          "predicted": {
+            "category": "account_access",
+            "confidence": 0.9,
+            "contains_pii": false,
+            "next_action": "escalate",
+            "reasoning": "Total blockage: the only admin cannot get in and nobody else can act, so there is no workaround, unlike a normal MFA reset. Complete inability to use the product with no path around it meets the critical bar. Escalation fires because severity is critical; identity verification for account recovery needs a human/security process regardless.dear",
+            "sentiment": "negative",
+            "severity": "critical",
+            "summary": "Sole administrator locked out of MFA with no recovery codes, no other admin can promote a replacement, and the account is completely unusable."
+          },
+          "ticket_id": "T-038",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 104,
+            "model": "claude-sonnet-5",
+            "output_tokens": 209
+          }
+        },
+        {
+          "cost_usd": 0.0064977,
+          "error": null,
+          "expected": {
+            "category": "feature_request",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "low"
+          },
+          "latency_s": 5.441021499999806,
+          "predicted": {
+            "category": "feature_request",
+            "confidence": 0.9,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "No documented behaviour is contradicted \u2014 the product works as designed and lacks a bulk edit capability, which is a feature_request even though phrased as frustration. Severity stays low since there is no current operational impact, just inconvenience. Tone is clearly angry ('ridiculous', 'sort it out'), but per policy anger does not raise severity or trigger escalation, so this routes to a human rather than being escalated.'",
+            "sentiment": "angry",
+            "severity": "low",
+            "summary": "Customer wants bulk edit capability for records; currently must edit rows one by one, no defect present."
+          },
+          "ticket_id": "T-039",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 101,
+            "model": "claude-sonnet-5",
+            "output_tokens": 232
+          }
+        },
+        {
+          "cost_usd": 0.006782700000000001,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "escalate",
+            "severity": "critical"
+          },
+          "latency_s": 5.308916699999827,
+          "predicted": {
+            "category": "account_access",
+            "confidence": 0.85,
+            "contains_pii": false,
+            "next_action": "escalate",
+            "reasoning": "SSO fails with a server-side 500 rather than an IdP misconfiguration \u2014 certificate valid, entity ID correct, and other companies report the same failure this morning, pointing to a fault on our side affecting many customers with no workaround. That crosses from account_access-as-configuration-issue into a critical, widespread outage. Escalating on severity; confidence slightly reduced since the other companies' reports are secondhand and unverified.",
+            "sentiment": "neutral",
+            "severity": "critical",
+            "summary": "SSO login returns 500 for all users at this customer and reportedly at other companies too, with no IdP-side misconfiguration found."
+          },
+          "ticket_id": "T-040",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 121,
+            "model": "claude-sonnet-5",
+            "output_tokens": 247
+          }
+        },
+        {
+          "cost_usd": 0.006971700000000001,
+          "error": null,
+          "expected": {
+            "category": "billing",
+            "contains_pii": true,
+            "next_action": "escalate",
+            "severity": "critical"
+          },
+          "latency_s": 6.39145469999994,
+          "predicted": {
+            "category": "billing",
+            "confidence": 0.85,
+            "contains_pii": true,
+            "next_action": "escalate",
+            "reasoning": "Another customer's financial data (address, bank details) was exposed to the wrong party \u2014 a data exposure at any severity is critical and triggers escalation regardless of the calm tone or single-account scope. Category is billing since the artifact is an invoice generation/delivery mix-up, not a software error. PII flag true for the third party's bank details and address pasted into the ticket. Some uncertainty since the customer infers rather than confirms their own invoice went to Halvorsen.'",
+            "sentiment": "neutral",
+            "severity": "critical",
+            "summary": "Customer received another company's (Halvorsen Logistics) invoice PDF containing that company's address and bank details, likely a cross-account mix-up."
+          },
+          "ticket_id": "T-041",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 99,
+            "model": "claude-sonnet-5",
+            "output_tokens": 264
+          }
+        },
+        {
+          "cost_usd": 0.0067857,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "low"
+          },
+          "latency_s": 7.180849099999705,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.9,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Reproducible UI defect with clear conditions and a workaround (rotate device), so technical not feature_request. Cosmetic/UI overlap with no data or access impact and an easy workaround caps it at low severity. Tone is factual, no emotion, so neutral. No tools available this turn, so route_to_human rather than auto_reply even though this looks like a simple, low-severity issue a KB article might cover.\u300b No PII present.\u300b \u200b \u200b",
+            "sentiment": "neutral",
+            "severity": "low",
+            "summary": "On mobile portrait view, a tooltip on the billing form visually overlaps the save button; rotating to landscape works around it."
+          },
+          "ticket_id": "T-042",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 92,
+            "model": "claude-sonnet-5",
+            "output_tokens": 253
+          }
+        },
+        {
+          "cost_usd": 0,
+          "error": "[anthropic] The response was truncated before the JSON closed. Raise MAX_OUTPUT_TOKENS or shorten the input.",
+          "expected": {
+            "category": "other",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "low"
+          },
+          "latency_s": 27.471290599999975,
+          "predicted": null,
+          "ticket_id": "T-043",
+          "usage": null
+        },
+        {
+          "cost_usd": 0.006881700000000001,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "close",
+            "severity": "medium"
+          },
+          "latency_s": 6.319523400000435,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.7,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Likely duplicate of already-reported issue 8891, so escalating again risks paging the same responder twice for the same incident. Webhook signature failures on every delivery would be high severity (core workflow broken, no stated workaround), but since this is explicitly a duplicate submission, routing to a human to confirm and link to the original ticket is correct rather than escalating fresh. Confidence lowered slightly since I cannot verify ticket 8891's current status or whether it was already escalated.'",
+            "sentiment": "neutral",
+            "severity": "high",
+            "summary": "Customer reports webhook signature verification failing on every delivery, duplicate follow-up to ticket 8891."
+          },
+          "ticket_id": "T-044",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 99,
+            "model": "claude-sonnet-5",
+            "output_tokens": 258
+          }
+        },
+        {
+          "cost_usd": 0.0064527000000000004,
+          "error": null,
+          "expected": {
+            "category": "account_access",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 5.7176987000002555,
+          "predicted": {
+            "category": "account_access",
+            "confidence": 0.75,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Account access request involving MFA reset for offboarding, not a defect. Medium severity: one account, business need to recover files, but no indication of urgent blocking deadline. Requires identity verification and manual handling by a human, not auto-reply, since disabling MFA is a security-sensitive action.No PII pasted into body; only describes an account, no identifiers given.Confidence moderate since no account identifier or verification details were provided.'",
+            "sentiment": "neutral",
+            "severity": "medium",
+            "summary": "Customer requests MFA disabled on a departing employee's account to recover owned files."
+          },
+          "ticket_id": "T-045",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 86,
+            "model": "claude-sonnet-5",
+            "output_tokens": 232
+          }
+        },
+        {
+          "cost_usd": 0.0083697,
+          "error": null,
+          "expected": {
+            "category": "other",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 8.105462999999872,
+          "predicted": {
+            "category": "complaint",
+            "confidence": 0.7,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "No concrete defect or evidence, just an unverified secondhand rumor, so this doesn't meet the technical bar and isn't a specific complaint about service either - closest fit is complaint/inquiry needing reassurance. Unverified claims don't raise severity by themselves, so medium rather than critical, pending investigation. Not escalating since there's no evidence of an actual breach, just a request for confirmation; a human should verify and respond.only.replied to accordingly.if needed.  \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b",
+            "sentiment": "negative",
+            "severity": "medium",
+            "summary": "Customer heard secondhand rumor of a breach on a forum and asks whether their data is safe, no evidence provided."
+          },
+          "ticket_id": "T-046",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 90,
+            "model": "claude-sonnet-5",
+            "output_tokens": 359
+          }
+        },
+        {
+          "cost_usd": 0.006503700000000001,
+          "error": null,
+          "expected": {
+            "category": "billing",
+            "contains_pii": false,
+            "next_action": "escalate",
+            "severity": "high"
+          },
+          "latency_s": 5.528604600000108,
+          "predicted": {
+            "category": "billing",
+            "confidence": 0.85,
+            "contains_pii": false,
+            "next_action": "escalate",
+            "reasoning": "Billing is wrong, not the software, so this is billing not technical. Money has been moving incorrectly for four months, which raises severity to at least high and triggers the escalation rule regardless of tone. Tone is negative but factual, not angry. No PII in the body\u2014no card numbers or personal identifiers, just seat counts.confidence slightly reduced since I inferred the seat removal actually took effect as described.\u300b",
+            "sentiment": "negative",
+            "severity": "high",
+            "summary": "Customer billed for nine seats instead of five for four months after removing four users in March, an overcharge of 39 EUR/seat."
+          },
+          "ticket_id": "T-047",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 88,
+            "model": "claude-sonnet-5",
+            "output_tokens": 235
+          }
+        },
+        {
+          "cost_usd": 0.0057657,
+          "error": null,
+          "expected": {
+            "category": "other",
+            "contains_pii": false,
+            "next_action": "request_more_info",
+            "severity": "low"
+          },
+          "latency_s": 5.028531099999782,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.25,
+            "contains_pii": false,
+            "next_action": "request_more_info",
+            "reasoning": "No error, no affected feature, no timing or scope given \u2014 'slow' alone is not actionable. Terse phrasing is graded neutral, not negative, per the no-tone-from-terseness rule. Requesting more info rather than guessing at technical severity or scope.\",\"escalate_ticket\":false}",
+            "sentiment": "neutral",
+            "severity": "low",
+            "summary": "Customer reports the product is slow with no further detail on what feature, page, or timing is affected."
+          },
+          "ticket_id": "T-048",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 42,
+            "model": "claude-sonnet-5",
+            "output_tokens": 195
+          }
+        },
+        {
+          "cost_usd": 0.006686700000000001,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 5.6560850000000755,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.8,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Reproducible defect (duplicate webhook delivery), so technical rather than complaint or feature_request. Severity medium: a workaround exists (customer already deduplicates) and there's no indication of broader outage or data loss, just an inconvenience. Neutral tone, factual report with no error scope beyond this account stated. No PII in body. Not escalation-worthy \u2014 no money, data loss/exposure, credentials, or compliance stated.",
+            "sentiment": "neutral",
+            "severity": "medium",
+            "summary": "Webhooks are delivered twice per event with identical event IDs, ~200ms apart, for this customer's integration."
+          },
+          "ticket_id": "T-049",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 94,
+            "model": "claude-sonnet-5",
+            "output_tokens": 246
+          }
+        },
+        {
+          "cost_usd": 0.0073347,
+          "error": null,
+          "expected": {
+            "category": "complaint",
+            "contains_pii": false,
+            "next_action": "escalate",
+            "severity": "high"
+          },
+          "latency_s": 5.764414199999919,
+          "predicted": {
+            "category": "complaint",
+            "confidence": 0.65,
+            "contains_pii": false,
+            "next_action": "escalate",
+            "reasoning": "No specific technical defect to open a ticket on\u2014this is a contractual SLA dispute over historical uptime, so complaint fits better than technical. Severity is medium: no active outage or ongoing operational damage, just a billing/credit claim in dispute. Escalates because the customer explicitly states a contractual consequence (SLA credits) and has copied legal, matching the named escalation trigger regardless of severity. Confidence is moderate since the underlying uptime claim is unverified and the right team (legal/success vs billing) is unclear.",
+            "sentiment": "negative",
+            "severity": "medium",
+            "summary": "Enterprise customer claims June uptime of 97.2% versus contracted 99.9% SLA, demanding service credits with legal copied."
+          },
+          "ticket_id": "T-050",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 125,
+            "model": "claude-sonnet-5",
+            "output_tokens": 283
+          }
+        },
+        {
+          "cost_usd": 0.005888700000000001,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "request_more_info",
+            "severity": "low"
+          },
+          "latency_s": 4.953261500000281,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.3,
+            "contains_pii": false,
+            "next_action": "request_more_info",
+            "reasoning": "A save failure is plausibly technical, but with no error message, affected feature, account identifier, or steps to reproduce, an engineer has nothing to act on. Requesting more info rather than guessing scope or severity. Low severity assigned provisionally since no blast radius is indicated; this should be revised once details arrive.,",
+            "sentiment": "neutral",
+            "severity": "low",
+            "summary": "Customer reports a recurring save error with no error message text, screen, or reproduction steps provided."
+          },
+          "ticket_id": "T-054",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 68,
+            "model": "claude-sonnet-5",
+            "output_tokens": 198
+          }
+        },
+        {
+          "cost_usd": 0.0070407,
+          "error": null,
+          "expected": {
+            "category": "complaint",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 5.5137440999997125,
+          "predicted": {
+            "category": "complaint",
+            "confidence": 0.85,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "No reproducible defect and the change is a deliberate pricing decision, so this is a complaint rather than billing (no incorrect charge) or feature_request. Tone is negative but measured, not angry. Severity is medium: a customer stating they may not renew represents real business risk accruing over time, above a mere low-severity gripe, but there's no immediate operational damage. No escalation trigger applies \u2014 no money moved incorrectly, no legal consequence stated, just dissatisfaction with policy.",
+            "sentiment": "negative",
+            "severity": "medium",
+            "summary": "Customer objects to a 22% Growth-tier price increase at renewal and is reviewing alternatives; no product defect involved."
+          },
+          "ticket_id": "T-055",
+          "usage": {
+            "cache_read_tokens": 9049,
+            "cache_write_tokens": 0,
+            "input_tokens": 117,
+            "model": "claude-sonnet-5",
+            "output_tokens": 265
+          }
+        }
+      ],
+      "split": "holdout",
+      "started_at": "2026-07-22T22:42:30.702622+00:00"
+    },
+    {
+      "config": {
+        "adaptive_thinking": false,
+        "max_output_tokens": null,
+        "model": "claude-sonnet-5",
+        "name": "sonnet+v3-terse",
+        "prompt": "v3-terse",
+        "provider": "anthropic"
+      },
+      "finished_at": "2026-07-22T22:44:03.618297+00:00",
+      "outcomes": [
+        {
+          "cost_usd": 0.0061091999999999995,
+          "error": null,
+          "expected": {
+            "category": "billing",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "high"
+          },
+          "latency_s": 5.85201029999962,
+          "predicted": {
+            "category": "billing",
+            "confidence": 0.7,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Billing because it concerns a refund tied to a specific invoice. Treated as high severity: if a refund was genuinely promised and not delivered, money is owed and unresolved for weeks with repeated contact \u2014 a named customer impact with no defect but a broken commitment. Not escalated: this is a process failure, not data loss, credential exposure, or incorrectly moved money at scale, and the promise itself is unverified from our side. Confidence is moderate since we cannot confirm the refund was actually approved.reasoning",
+            "sentiment": "negative",
+            "severity": "high",
+            "summary": "Customer reports a previously promised refund for invoice INV-2231 has still not arrived after three weeks and three follow-ups."
+          },
+          "ticket_id": "T-036",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 94,
+            "model": "claude-sonnet-5",
+            "output_tokens": 271
+          }
+        },
+        {
+          "cost_usd": 0.0054282,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 5.477242500000102,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.75,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "This is a reproducible defect (CSP misconfiguration blocking a script) rather than a pricing issue, so technical over billing despite the page being about payment. Blocks checkout for all Firefox users with a workaround (use Chrome), capping severity at high rather than critical. No PII in the body. Routed to human rather than escalated since a browser-specific workaround exists.'",
+            "sentiment": "neutral",
+            "severity": "high",
+            "summary": "Payment page renders blank in Firefox 141 due to a CSP error blocking a CDN script; works in Chrome."
+          },
+          "ticket_id": "T-037",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 92,
+            "model": "claude-sonnet-5",
+            "output_tokens": 226
+          }
+        },
+        {
+          "cost_usd": 0.0076542,
+          "error": null,
+          "expected": {
+            "category": "account_access",
+            "contains_pii": false,
+            "next_action": "escalate",
+            "severity": "critical"
+          },
+          "latency_s": 9.451696799999809,
+          "predicted": {
+            "category": "account_access",
+            "confidence": 0.9,
+            "contains_pii": false,
+            "next_action": "escalate",
+            "reasoning": "Complete loss of access with no workaround for the entire account \u2014 sole admin, no recovery codes, no other admin to promote. This blocks all product use, meeting the 'customer fully blocked with no workaround' bar for critical. Escalating because it's critical severity; support will need identity verification to manually restore access.  No PII pasted in body beyond the sender's own situation.  Sentiment reads as worried/negative rather than hostile.  Confidence high given explicit facts.  ---  (kept within limits)  ---  end.  ---  done.  ---  fin.  ---  ok.  ---  stop.  ---  done.  ---  x.  ---  y.  ---  z.  ---  done.  ---  final.  ---  ok.  ---  done.  ---  end.  ---  stop.  ---  final.  ---  end.",
+            "sentiment": "negative",
+            "severity": "critical",
+            "summary": "Sole admin locked out of account after losing MFA device with no saved recovery codes; no other admin exists to restore access."
+          },
+          "ticket_id": "T-038",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 104,
+            "model": "claude-sonnet-5",
+            "output_tokens": 372
+          }
+        },
+        {
+          "cost_usd": 0.0058752,
+          "error": null,
+          "expected": {
+            "category": "feature_request",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "low"
+          },
+          "latency_s": 6.664638300000206,
+          "predicted": {
+            "category": "feature_request",
+            "confidence": 0.9,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Product works as designed but lacks bulk edit; concrete missing capability makes this a feature_request rather than complaint. No defect or urgency, so severity stays low despite the angry tone. Routed to human since feature requests aren't auto-replied and there's no compliance angle to escalate.confidence high because the ask is unambiguous.<br>Only issue is length so trimming.\n\nNo PII present, only frustration about pricing and workflow.\n\n(final)",
+            "sentiment": "angry",
+            "severity": "low",
+            "summary": "Customer wants a bulk edit feature for records; currently must edit rows individually, up to 200 at a time."
+          },
+          "ticket_id": "T-039",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 101,
+            "model": "claude-sonnet-5",
+            "output_tokens": 254
+          }
+        },
+        {
+          "cost_usd": 0.0058452,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "escalate",
+            "severity": "critical"
+          },
+          "latency_s": 5.63103349999983,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.85,
+            "contains_pii": false,
+            "next_action": "escalate",
+            "reasoning": "Customer's IdP config appears unchanged (valid cert, matching entity ID) and multiple unrelated companies report the same failure this morning, pointing to a server-side SSO outage rather than a misconfigured IdP \u2014 this is technical, not account_access. Total login blockage with no workaround for all affected users is critical. Escalating per policy for critical severity; confidence slightly reduced since the cross-customer claim is unverified secondhand info.",
+            "sentiment": "neutral",
+            "severity": "critical",
+            "summary": "SSO login returns 500 for all users at this customer and reportedly at other companies too, with no known IdP config change on their side."
+          },
+          "ticket_id": "T-040",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 121,
+            "model": "claude-sonnet-5",
+            "output_tokens": 248
+          }
+        },
+        {
+          "cost_usd": 0.0062892,
+          "error": null,
+          "expected": {
+            "category": "billing",
+            "contains_pii": true,
+            "next_action": "escalate",
+            "severity": "critical"
+          },
+          "latency_s": 6.974031299999751,
+          "predicted": {
+            "category": "billing",
+            "confidence": 0.85,
+            "contains_pii": true,
+            "next_action": "escalate",
+            "reasoning": "Data belonging to one customer (address, bank details) was shown to a different customer \u2014 a data exposure to the wrong party, which is critical regardless of the single-record scope per the boundary rule. Billing owns invoice generation/delivery, so category is billing over technical since the defect is about wrong data being attached, not a system-wide failure. Escalation fires because data was exposed and third-party bank/address details are present in the body. Confidence is not higher because we don't know if this is a one-off misrouting or a broader batch issue.",
+            "sentiment": "neutral",
+            "severity": "critical",
+            "summary": "Customer received another company's (Halvorsen Logistics) invoice PDF containing that company's address and bank details, suggesting a cross-tenant data leak."
+          },
+          "ticket_id": "T-041",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 99,
+            "model": "claude-sonnet-5",
+            "output_tokens": 282
+          }
+        },
+        {
+          "cost_usd": 0.0055482,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "low"
+          },
+          "latency_s": 5.6907312999996975,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.9,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Reproducible UI defect on a specific device/orientation, so technical rather than complaint or feature_request. A workaround (rotate device) exists and impact is purely cosmetic/inconvenience, capping severity at low. Tone is factual and matter-of-fact, no urgency indicated. No tools available so cannot confirm a KB article, hence route_to_human instead of auto_reply.",
+            "sentiment": "neutral",
+            "severity": "low",
+            "summary": "On iPhone portrait mode, a help tooltip on the billing form overlaps the save button; rotating to landscape works around it."
+          },
+          "ticket_id": "T-042",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 92,
+            "model": "claude-sonnet-5",
+            "output_tokens": 234
+          }
+        },
+        {
+          "cost_usd": 0.0083142,
+          "error": null,
+          "expected": {
+            "category": "other",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "low"
+          },
+          "latency_s": 8.980808799999977,
+          "predicted": {
+            "category": "other",
+            "confidence": 0.9,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Not a support issue; this is a business development/partnership inquiry, which falls under 'other'. No urgency or defect involved, so severity is low. Needs routing to a human (sales/partnerships team) since it requires a business decision, not something to auto-reply or close.confidence high given the request is explicit and unambiguous.There is no personal data in the body beyond the sender's own signature context.So contains_pii is false.The tone is matter-of-fact, hence neutral.No escalation criteria apply.Straightforward routing decision.Done.Final.Ok.Done.Stop.Yes.Fine.Done.End.Stop.Now.Ok.Enough.Done.Final.Stop.Ok.Done.Stop.Ok.Done.Stop.Ok.Done.Stop.Ok.Done.Stop.Ok.Done.Stop.Ok.Done.Stop.Ok.Done.Stop.Ok.Done.Stop.Ok.Done.",
+            "sentiment": "neutral",
+            "severity": "low",
+            "summary": "Consultancy inquiring about becoming a reseller/partner for the platform in the Nordics region."
+          },
+          "ticket_id": "T-043",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 99,
+            "model": "claude-sonnet-5",
+            "output_tokens": 417
+          }
+        },
+        {
+          "cost_usd": 0.0060342,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "close",
+            "severity": "medium"
+          },
+          "latency_s": 6.107279500000004,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.6,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Webhook signature checks failing on all deliveries is a core integration workflow broken, warranting high severity. This appears to duplicate ticket 8891, which may already be escalated or in progress \u2014 routing to a human to link/verify rather than escalating again or closing outright, since we cannot confirm 8891's current status or whether it was actually received.  If 8891 is confirmed already escalated, this should be closed as duplicate instead.  Uncertainty about the linked ticket's state lowers confidence.",
+            "sentiment": "neutral",
+            "severity": "high",
+            "summary": "Customer reports webhook signature verification failing on every delivery, duplicate of ticket 8891 filed yesterday."
+          },
+          "ticket_id": "T-044",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 99,
+            "model": "claude-sonnet-5",
+            "output_tokens": 265
+          }
+        },
+        {
+          "cost_usd": 0.0053952,
+          "error": null,
+          "expected": {
+            "category": "account_access",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 5.869416700000329,
+          "predicted": {
+            "category": "account_access",
+            "confidence": 0.75,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Account access request involving offboarding and file recovery, not a defect. No outage or blocked workforce \u2014 one departed account, workaround likely exists (admin transfer of ownership), so medium not high. Requires identity verification and possibly admin-role handling, so a human must process it rather than auto-reply. No card, credential, or personal data pasted into body \u2014 sender's own account details are envelope, not body PII.'",
+            "sentiment": "neutral",
+            "severity": "medium",
+            "summary": "Customer requests MFA reset/disable on a departed employee's account to recover their owned files."
+          },
+          "ticket_id": "T-045",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 86,
+            "model": "claude-sonnet-5",
+            "output_tokens": 225
+          }
+        },
+        {
+          "cost_usd": 0.005827199999999999,
+          "error": null,
+          "expected": {
+            "category": "other",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 6.576700600000095,
+          "predicted": {
+            "category": "complaint",
+            "confidence": 0.7,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "No reproducible defect, no evidence of a breach \u2014 this is an unverified claim, which per policy does not raise severity. Closest to complaint/inquiry rather than technical since nothing malfunctioning is described. Routed to a human rather than escalated because there is no concrete evidence, only secondhand hearsay; a human should still verify no real incident is occurring.confidence.0.7 reflects the ambiguity of whether this warrants any security team follow-up.'",
+            "sentiment": "negative",
+            "severity": "medium",
+            "summary": "Customer heard secondhand rumor of a breach on a forum, no evidence provided, asking if their data is safe."
+          },
+          "ticket_id": "T-046",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 90,
+            "model": "claude-sonnet-5",
+            "output_tokens": 253
+          }
+        },
+        {
+          "cost_usd": 0.0063162,
+          "error": null,
+          "expected": {
+            "category": "billing",
+            "contains_pii": false,
+            "next_action": "escalate",
+            "severity": "high"
+          },
+          "latency_s": 6.781882400000086,
+          "predicted": {
+            "category": "billing",
+            "confidence": 0.75,
+            "contains_pii": false,
+            "next_action": "escalate",
+            "reasoning": "Seat count billing mismatch is billing, not technical, since the question is whether the charged amount is correct. Money has been charged incorrectly (if removal was processed correctly on the customer side) across four months, which meets the money-moved-wrongly floor of at least high. Escalating rather than routing because incorrect charges qualify per policy. Confidence is moderated since we cannot verify the removal was correctly processed on our end versus a sync/admin error, but the customer's claim as written describes an overcharge.reasoning kept tight.','placeholder'.\n",
+            "sentiment": "negative",
+            "severity": "high",
+            "summary": "Customer removed four users in March but has been billed for nine seats instead of five for four months, an overcharge of 39 EUR per seat."
+          },
+          "ticket_id": "T-047",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 88,
+            "model": "claude-sonnet-5",
+            "output_tokens": 286
+          }
+        },
+        {
+          "cost_usd": 0,
+          "error": "[anthropic] The model's response broke the schema's constraints on: reasoning. The API treats bounds like max_length as advice rather than a constraint, so the prompt has to state them too.",
+          "expected": {
+            "category": "other",
+            "contains_pii": false,
+            "next_action": "request_more_info",
+            "severity": "low"
+          },
+          "latency_s": 8.903846199999862,
+          "predicted": null,
+          "ticket_id": "T-048",
+          "usage": null
+        },
+        {
+          "cost_usd": 0.0054342,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 5.189185600000201,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.75,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Reproducible defect in webhook delivery, so technical over feature_request. A workaround exists (dedup on their side) and it affects one customer without data loss or money involved, so severity caps at medium rather than high \u2014 it's inconvenient but not blocking a core workflow entirely. No urgency signals for escalation; routed to a human engineer to investigate duplicate delivery logic.",
+            "sentiment": "neutral",
+            "severity": "medium",
+            "summary": "Webhooks are delivered twice for every event with identical event ids, though customer has a workaround (client-side dedup)."
+          },
+          "ticket_id": "T-049",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 94,
+            "model": "claude-sonnet-5",
+            "output_tokens": 226
+          }
+        },
+        {
+          "cost_usd": 0.0062172,
+          "error": null,
+          "expected": {
+            "category": "complaint",
+            "contains_pii": false,
+            "next_action": "escalate",
+            "severity": "high"
+          },
+          "latency_s": 5.553482499999973,
+          "predicted": {
+            "category": "billing",
+            "confidence": 0.72,
+            "contains_pii": false,
+            "next_action": "escalate",
+            "reasoning": "Contractual/legal consequence explicitly stated (legal team copied, credit claim under signed SLA), which triggers escalation regardless of severity. Categorized as billing since the core ask is service credits under a contract, not a live technical defect to fix. Severity high, not critical: no live outage evidence for us to verify, single customer, and this is a dispute over past performance rather than an active incident. Confidence moderated because uptime figures are the customer's own monitoring and unverified against our records.'",
+            "sentiment": "negative",
+            "severity": "high",
+            "summary": "Enterprise customer claims SLA breach (97.2% vs 99.9% contracted uptime for June) and is requesting service credits, with legal team copied."
+          },
+          "ticket_id": "T-050",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 125,
+            "model": "claude-sonnet-5",
+            "output_tokens": 272
+          }
+        },
+        {
+          "cost_usd": 0.0048912,
+          "error": null,
+          "expected": {
+            "category": "technical",
+            "contains_pii": false,
+            "next_action": "request_more_info",
+            "severity": "low"
+          },
+          "latency_s": 4.97250669999994,
+          "predicted": {
+            "category": "technical",
+            "confidence": 0.45,
+            "contains_pii": false,
+            "next_action": "request_more_info",
+            "reasoning": "A save error is a defect (technical) not a feature request, but with no error text, screen, or steps to reproduce an engineer has nothing to act on. Severity assumed medium pending details\u2014could be minor or blocking depending on which save action fails. Requesting more info rather than guessing at scope or urgency.\"}\"}",
+            "sentiment": "neutral",
+            "severity": "medium",
+            "summary": "Customer reports recurring error when saving, no error message, page, or repro details provided."
+          },
+          "ticket_id": "T-054",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 68,
+            "model": "claude-sonnet-5",
+            "output_tokens": 195
+          }
+        },
+        {
+          "cost_usd": 0.0055632,
+          "error": null,
+          "expected": {
+            "category": "complaint",
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "severity": "medium"
+          },
+          "latency_s": 6.229667299999619,
+          "predicted": {
+            "category": "complaint",
+            "confidence": 0.85,
+            "contains_pii": false,
+            "next_action": "route_to_human",
+            "reasoning": "Explicit dissatisfaction with a deliberate pricing decision, not a defect and not a plan-change request, so complaint over billing or feature_request. Mentioning reviewing alternatives signals possible churn/relationship damage, warranting medium severity rather than low. Tone is dissatisfied but measured, not hostile, so negative not angry. No escalation trigger present.'",
+            "sentiment": "negative",
+            "severity": "medium",
+            "summary": "Customer objects to a 22% Growth-tier price increase at renewal and is evaluating alternatives; no product defect."
+          },
+          "ticket_id": "T-055",
+          "usage": {
+            "cache_read_tokens": 5874,
+            "cache_write_tokens": 0,
+            "input_tokens": 117,
+            "model": "claude-sonnet-5",
+            "output_tokens": 230
+          }
+        }
+      ],
+      "split": "holdout",
+      "started_at": "2026-07-22T22:43:24.182356+00:00"
+    }
+  ],
+  "schema_version": 2
+}

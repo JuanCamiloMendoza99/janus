@@ -88,3 +88,7 @@ class HealthResponse(BaseModel):
     environment: str
     provider: str
     model: str
+    #: The active playbook variant. Reported for the same reason `provider` and
+    #: `model` are: the prompt is a versioned, swappable dependency (ADR-009),
+    #: and this is how you confirm the swap took effect without reading the logs.
+    prompt: str

@@ -1,0 +1,57 @@
+{
+  "aggregates": [
+    {
+      "config_name": "sonnet+v1-baseline",
+      "cost_usd": 0.070035,
+      "judged": 16,
+      "means": {
+        "reasoning_grounded": 4.6875,
+        "reasoning_names_signal": 4.75,
+        "summary_actionable": 4.875,
+        "summary_faithful": 4.9375
+      }
+    },
+    {
+      "config_name": "sonnet+v2-examples",
+      "cost_usd": 0.06949999999999999,
+      "judged": 16,
+      "means": {
+        "reasoning_grounded": 5.0,
+        "reasoning_names_signal": 4.8125,
+        "summary_actionable": 4.8125,
+        "summary_faithful": 4.9375
+      }
+    },
+    {
+      "config_name": "sonnet+v3-terse",
+      "cost_usd": 0.075255,
+      "judged": 16,
+      "means": {
+        "reasoning_grounded": 4.625,
+        "reasoning_names_signal": 4.75,
+        "summary_actionable": 4.9375,
+        "summary_faithful": 4.9375
+      }
+    }
+  ],
+  "agreement": {
+    "exact": {
+      "reasoning_grounded": 0.5,
+      "reasoning_names_signal": 0.9,
+      "summary_actionable": 0.8,
+      "summary_faithful": 0.9
+    },
+    "mae": {
+      "reasoning_grounded": 0.5,
+      "reasoning_names_signal": 0.1,
+      "summary_actionable": 0.2,
+      "summary_faithful": 0.1
+    },
+    "n": 10
+  },
+  "judge_model": "claude-opus-4-8",
+  "judged_at": "2026-07-22T22:45:30.263660+00:00",
+  "schema_version": 1,
+  "source": "results-prompts-holdout-2026-07-22.json",
+  "total_cost_usd": 0.21478999999999998
+}

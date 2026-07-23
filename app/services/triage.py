@@ -11,7 +11,6 @@ tickets produce a byte-identical prefix.
 from __future__ import annotations
 
 from app.api.schemas import TriageRequest
-from app.domain.prompts import load_playbook
 from app.domain.triage import TriageResult
 from app.providers.base import LLMProvider, Message, ParsedCompletion, Prompt
 
@@ -33,12 +32,14 @@ def render_ticket(request: TriageRequest) -> str:
     )
 
 
-def build_triage_prompt(request: TriageRequest) -> Prompt:
+def build_triage_prompt(request: TriageRequest, playbook: str) -> Prompt:
     """Assemble the prompt for one ticket.
 
-    `cacheable_prefix` is the playbook and nothing else — `load_playbook()`
-    reads it once per process and returns the same string every time, which is
-    what makes it a cache prefix rather than a large system prompt.
+    `cacheable_prefix` is the playbook and nothing else. The text arrives as an
+    argument rather than being fetched here: which variant is in play is a
+    configuration decision (ADR-009), and a service that read the setting itself
+    could not be swept over the prompt axis in one process — which is exactly
+    what `app/evals/runner.py` does.
 
     `system` stays `None`. There is nothing per-request to say that is not
     already in the ticket, and anything put there would render *after* the
@@ -46,7 +47,7 @@ def build_triage_prompt(request: TriageRequest) -> Prompt:
     that already live in the playbook.
     """
     return Prompt(
-        cacheable_prefix=load_playbook(),
+        cacheable_prefix=playbook,
         system=None,
         messages=[Message(role="user", content=render_ticket(request))],
     )
@@ -55,6 +56,7 @@ def build_triage_prompt(request: TriageRequest) -> Prompt:
 async def triage_ticket(
     provider: LLMProvider,
     request: TriageRequest,
+    playbook: str,
 ) -> ParsedCompletion[TriageResult]:
     """Classify one ticket into a validated `TriageResult`.
 
@@ -63,4 +65,4 @@ async def triage_ticket(
     interaction: giving the model tools here would mean a `tool_use` turn that
     `parse()` has no way to answer.
     """
-    return await provider.parse(build_triage_prompt(request), TriageResult)
+    return await provider.parse(build_triage_prompt(request, playbook), TriageResult)
