@@ -141,19 +141,31 @@ cd web && npm install && npm run dev
 
 Done when:
 
-- [ ] A reply streams token by token in the browser rather than appearing at once.
-- [ ] A duplicate-charge ticket shows a `search_kb` badge *before* the grounded
-      answer continues.
-- [ ] A tool-using exchange displays more than one model call, and their costs sum
-      to the session total shown in the panel.
-- [ ] `cache_hit_rate` is visible and non-zero after a second identical request
-      against a real provider.
-- [ ] Changing `LLM_PROVIDER`, restarting the backend and reloading changes the
-      badge — **with no frontend change**. This is the whole project in one check.
-- [ ] The parser has tests for a frame split across reads, a `: ping` keepalive,
-      and a terminal `done` carrying `stop_reason: "error"`.
-- [ ] `npm run build`, then the app works served by FastAPI alone with the Vite
-      dev server stopped.
-- [ ] The console runs end to end on `LLM_PROVIDER=fake` with no API keys set.
-- [ ] The README shows a screenshot or a short GIF. A visual phase that nobody
-      can see from the README has not paid for itself.
+- [x] A reply streams token by token in the browser rather than appearing at once.
+      (`delta` frames append to the trailing text segment; a blinking cursor marks
+      the live turn.)
+- [x] A duplicate-charge ticket shows a `search_kb` badge *before* the grounded
+      answer continues. (`tool_call` frames render an inline `ToolBadge` in stream
+      order; needs a real provider to choose the tool.)
+- [x] A tool-using exchange displays more than one model call, and their costs sum
+      to the session total shown in the panel. (`InstrumentPanel` lists each
+      `usage` row and totals them from the frames — never recomputed in the browser.)
+- [x] `cache_hit_rate` is visible and non-zero after a second identical request
+      against a real provider. (Read from `GET /v1/usage`, refreshed after each
+      exchange; shown prominently.)
+- [x] Changing `LLM_PROVIDER`, restarting the backend and reloading changes the
+      badge — **with no frontend change**. (`HealthBadge` reads `GET /health`;
+      verified the payload reflects the active provider/model/prompt.)
+- [x] The parser has tests for a frame split across reads, a `: ping` keepalive,
+      and a terminal `done` carrying `stop_reason: "error"`. (`web/src/sse.test.ts`,
+      12 tests green.)
+- [x] `npm run build`, then the app works served by FastAPI alone with the Vite
+      dev server stopped. (Verified: `/` serves `index.html`, assets resolve,
+      `/v1/*` and `/health` are not shadowed.)
+- [x] The console runs end to end on `LLM_PROVIDER=fake` with no API keys set.
+- [x] The README shows a screenshot. `docs/images/console.png`, captured against
+      `LLM_PROVIDER=anthropic`: an inline `search_kb` badge before a grounded answer
+      citing `kb-102`, the per-call cost rows, the session total, and a 59% cache
+      hit rate.
+- [x] ADR-010 records the SSE-over-POST decision — why the client hand-rolls
+      stream parsing instead of using `EventSource`, which cannot POST.

@@ -371,6 +371,41 @@ python scripts/judge_eval.py --results docs/evals/results-prompts-holdout-*.json
 python scripts/report_prompt_eval.py
 ```
 
+## Web console
+
+Everything above is invisible without a terminal. The console
+([`web/`](web/), Vite + React + TypeScript, no framework) makes it visible: an
+**instrument panel that happens to have a chat in it.** The answer streams token
+by token, a `search_kb` badge appears inline the moment the model calls the tool,
+and the panel shows the cost of every model call — several per request — adding up
+to a running session total, with the cache hit rate and the active
+provider·model·prompt badge beside it.
+
+![The Janus web console — streaming answer with an inline search_kb badge and the cost panel](docs/images/console.png)
+
+That badge is the whole project in one line of UI: change `LLM_PROVIDER`, restart
+the backend, reload, and it changes — with no frontend code touched.
+
+The one genuinely hard part is the SSE client. The browser's native `EventSource`
+**only issues GET requests**, and `/v1/chat` is a POST with a JSON body, so the
+client reads the stream with `fetch()` + a reader and parses the SSE framing by
+hand — buffering frames split across reads, decoding UTF-8 across boundaries, and
+skipping `: ping` keepalives. That parser is pure and is the only part with unit
+tests. See ADR-010.
+
+```bash
+# Backend (no credentials needed) + the dev server
+LLM_PROVIDER=fake uvicorn app.main:app --reload
+cd web && npm install && npm run dev        # http://localhost:5173
+
+npm test -- --run                           # the SSE parser's tests
+npm run build                               # then FastAPI serves web/dist at /
+```
+
+Built, it is one process on one port: `npm run build`, then `uvicorn app.main:app`
+serves the console at `/` and the API at `/v1/*` and `/health` — the static mount
+is guarded so the backend also boots fine without a build.
+
 ## Testing
 
 ```bash
@@ -407,6 +442,7 @@ app/
 ├── tools/            # Tool specs, handlers, dispatch and the KB corpus
 ├── evals/            # The eval harness: dataset, runner, scoring, judge
 └── observability/    # Usage ledger + cost middleware
+web/                  # The console: Vite + React + TS (src/sse.ts is the tested part)
 evals/                # The golden dataset + judge calibration set (dev tooling)
 scripts/              # Eval + judge CLIs (argparse and print only)
 tests/                # Pytest — runs entirely on the fake provider
@@ -428,7 +464,7 @@ Each phase has an implementation-ready plan in [`docs/plans/`](docs/plans/README
 - [x] **[Phase 3 — Structured outputs & caching](docs/plans/phase-3-structured-and-caching.md)**: `/v1/triage`, prompt caching proven by measurement
 - [x] **[Phase 4 — Evaluation](docs/plans/phase-4-evals.md)**: which provider to actually pay for — cost, latency and accuracy on a golden dataset
 - [x] **[Phase 5 — Prompt engineering & optimization](docs/plans/phase-5-prompt-optimization.md)**: which prompt to ship — versioned playbook variants, A/B'd on the golden set, with LLM-as-judge for the free-text fields
-- [ ] **[Phase 6 — Web console](docs/plans/phase-6-web-console.md)**: a minimal React client that makes streaming, tool calls and per-request cost visible without a terminal
+- [x] **[Phase 6 — Web console](docs/plans/phase-6-web-console.md)**: a minimal React client that makes streaming, tool calls and per-request cost visible without a terminal
 
 ## Current status
 
@@ -464,6 +500,15 @@ free-text fields, calibrated against hand scores (78% exact agreement). The
 champion is `v2-examples` and the default points at it; the comparison and the
 trade-off it accepts are in [`docs/evals/prompts.md`](docs/evals/prompts.md). The
 whole prompt sweep, judge included, cost $0.51.
+
+**Phase 6 — done.** The web console in [`web/`](web/) — Vite + React + TypeScript,
+no framework — makes the gateway's work visible: streaming answers, inline
+`search_kb` badges, a per-model-call cost panel with the session total and cache
+hit rate, and a provider·model·prompt badge that changes with an environment
+variable and no frontend code. The SSE-over-POST client is hand-rolled because the
+browser's `EventSource` cannot POST (ADR-010); its parser is pure and unit-tested.
+Built assets are served by FastAPI, so production is one process on one port. It
+runs end to end on `LLM_PROVIDER=fake` with no keys.
 
 One honest gap: there is no OpenAI key on the machine this was built on, so
 `OpenAIProvider.parse()` is covered by tests against a stubbed SDK — including
