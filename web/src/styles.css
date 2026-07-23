@@ -1,0 +1,344 @@
+/* Plain CSS, one file. No framework, no design system — the console is an
+   instrument, not a product (see docs/plans/phase-6-web-console.md). The layout
+   is a header row above two columns: a flexible chat on the left, a fixed
+   instrument panel on the right. */
+
+:root {
+  --bg: #0f1117;
+  --surface: #171a23;
+  --surface-2: #1e2230;
+  --border: #2a2f3d;
+  --text: #e6e9ef;
+  --muted: #8b93a7;
+  --accent: #6ea8fe;
+  --tool: #f0b45f;
+  --error: #ff6b6b;
+  --ok: #64d69a;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* --- Header --------------------------------------------------------------- */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 1.1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.header__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.header__logo {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.header__tagline {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.header__controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.badge {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  padding: 0.28rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.badge--muted {
+  color: var(--muted);
+}
+
+.badge__provider {
+  color: var(--ok);
+}
+.badge__model {
+  color: var(--accent);
+}
+.badge__prompt {
+  color: var(--muted);
+}
+.badge__sep {
+  color: var(--muted);
+  margin: 0 0.4rem;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+}
+.toggle input {
+  accent-color: var(--accent);
+}
+
+/* --- Main: chat | panel --------------------------------------------------- */
+
+.main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  min-height: 0;
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+}
+
+.transcript {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.transcript--empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  text-align: center;
+}
+.transcript--empty p {
+  max-width: 42ch;
+}
+.transcript code {
+  font-family: var(--mono);
+  color: var(--tool);
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.message__role {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.message__body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.message--user .message__body {
+  color: var(--text);
+}
+.message--assistant .message__body {
+  color: #cdd3e0;
+}
+.message--error .message__body {
+  color: var(--error);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
+.cursor {
+  color: var(--accent);
+  animation: blink 1s step-start infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Inline tool badge, placed where the call happened in the answer. */
+.tool-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 0 0.15rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--tool);
+  border-radius: 5px;
+  background: rgba(240, 180, 95, 0.08);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  vertical-align: baseline;
+}
+.tool-badge__icon {
+  color: var(--tool);
+}
+.tool-badge__name {
+  color: var(--tool);
+  font-weight: 600;
+}
+.tool-badge__args {
+  color: var(--muted);
+}
+
+/* --- Composer ------------------------------------------------------------- */
+
+.composer {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.8rem 1.1rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.composer__input {
+  flex: 1;
+  resize: none;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+}
+.composer__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.composer__send {
+  align-self: stretch;
+  padding: 0 1.1rem;
+  background: var(--accent);
+  color: #0b1020;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.composer__send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* --- Instrument panel ----------------------------------------------------- */
+
+.panel {
+  overflow-y: auto;
+  padding: 1.1rem;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+
+.panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.panel__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.panel__grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.28rem 0.8rem;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+.panel__grid dt {
+  color: var(--muted);
+}
+.panel__grid dd {
+  margin: 0;
+  text-align: right;
+}
+.panel__unit {
+  color: var(--muted);
+}
+
+.panel__cost {
+  font-family: var(--mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ok);
+}
+
+.panel__calls {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.panel__cachehit {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.panel__cachehit-value {
+  font-family: var(--mono);
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.panel__cachehit-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}

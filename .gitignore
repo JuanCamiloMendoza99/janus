@@ -10,6 +10,11 @@ dist/
 .venv/
 venv/
 
+# Node / web console (dist/ is already ignored above)
+node_modules/
+# TypeScript incremental build cache — machine-local, regenerated on build
+*.tsbuildinfo
+
 # Tooling caches
 .pytest_cache/
 .ruff_cache/
