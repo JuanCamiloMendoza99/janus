@@ -76,6 +76,15 @@ dead code, no placeholder hacks left behind.
   2026-07-22 for $1.62: haiku 60.0% classification, sonnet 70.9%, opus 74.5%,
   sonnet+thinking 81.8% (the recommendation — best accuracy and calibration, and
   cheaper than opus). Recommendation and caveats in `docs/evals/README.md`.
+- ✅ **Phase 6 — Web console** (done 2026-07-23): `docs/plans/phase-6-web-console.md`.
+  A Vite + React + TS client in `web/` (no framework, no state/CSS library): an
+  instrument panel with a chat in it. The SSE-over-POST client is hand-rolled
+  (`web/src/sse.ts`, the only unit-tested part — `EventSource` cannot POST, ADR-010),
+  the four frames render (inline tool badges, per-call cost rows, `done` errors
+  shown), and the panel reads `/v1/usage` + `/health`. Backend gains
+  `CORSMiddleware` (`CORS_ALLOW_ORIGINS`, never `*`) and serves `web/dist` at `/`
+  (guarded on existence, mounted last). Adds ADR-010, `tests/test_web.py`, a Node CI
+  job. Runs end to end on `LLM_PROVIDER=fake`.
 - ✅ **Phase 5 — Prompt engineering & optimization** (done 2026-07-22):
   `docs/plans/phase-5-prompt-optimization.md`. The playbook is now versioned
   variants under `app/domain/prompts/playbook/` behind a `PromptRegistry`, selected
@@ -154,7 +163,8 @@ app/services/          Prompt assembly + the tool loop (what the routers delegat
                        chat.py (the loop) and triage.py (the constrained call)
 app/tools/             Tool specs, handlers, dispatch, the KB corpus
 app/observability/     ledger.py (per-request usage), middleware.py (cost log)
-app/evals/             The eval harness: dataset, runner, scoring, results
+app/evals/             The eval harness: dataset, runner, scoring, results, judge
+web/                   The console: Vite + React + TS; src/sse.ts is the tested part
 evals/                 The golden dataset (dev tooling — not shipped in the wheel)
 scripts/               CLI entrypoints for the harness (argparse + print only)
 tests/                 Pytest — runs entirely on the fake provider

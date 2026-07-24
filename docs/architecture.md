@@ -473,3 +473,49 @@ statistical tie on accuracy by having the lowest dropped-ticket rate and the bes
 free-text quality, at +21% prefix tokens (~+11% per cached ticket). The full
 comparison, the judge's calibration against hand scores, and the trade-off the
 champion accepts are in `docs/evals/prompts.md`.
+
+## ADR-010 — The web console hand-rolls SSE-over-POST
+
+**Status:** accepted (Phase 6)
+
+**Context.** The console (Phase 6) has to consume the same `/v1/chat` stream that
+`curl` does. The browser ships an API built for exactly this — `EventSource`,
+which opens a Server-Sent Events connection and dispatches parsed events — and
+reaching for it is the obvious move.
+
+It does not work here, and the reason is not a detail: **`EventSource` can only
+issue `GET` requests.** `/v1/chat` is a `POST` with a JSON body (the conversation
+and `use_tools`), and there is no way to give `EventSource` a body or a method. The
+discovery normally happens *after* a component has been written around it, which is
+why it is worth recording as a decision rather than a footnote.
+
+**Decision.** The client opens the stream with `fetch()`, takes
+`response.body.getReader()`, and parses the SSE framing by hand
+(`web/src/sse.ts`). Three things it has to get right, each of which produces a bug
+that looks like a backend problem:
+
+- **A read is not a frame.** The reader returns arbitrary byte boundaries, so one
+  `event:`/`data:` pair can arrive split across two reads. The parser buffers and
+  emits only frames terminated by a blank line.
+- **UTF-8 characters split across reads.** Decoding each chunk in isolation renders
+  a multi-byte character that lands on a boundary as `�`. The reader layer uses
+  `TextDecoder().decode(chunk, { stream: true })`, which holds a trailing partial
+  sequence until the next read completes it.
+- **Keepalive comments.** `sse-starlette` emits `: ping` lines to hold the
+  connection open; a parser that assumes every line is a field chokes on them, so
+  comment lines are skipped.
+
+**What it costs.** Roughly a hundred lines the platform would otherwise provide,
+plus the reconnection and `Last-Event-ID` machinery `EventSource` gives for free
+and this client simply does without — a chat exchange is short-lived and a dropped
+stream is re-sent by the user, so automatic reconnection would be answering a
+question nobody asked. The parser is a pure function (text in, frames out), which
+is the payoff: it is the only part of the frontend with unit tests
+(`web/src/sse.test.ts`), covering a frame split across reads, a `: ping`
+keepalive, and a terminal `done` carrying `stop_reason: "error"`.
+
+**The corollary the tests pin.** Because the request is a cross-origin `POST` in
+development, the browser sends a CORS **preflight** `OPTIONS` before the stream
+opens. If that is not answered the stream never starts, so `CORSMiddleware` is part
+of this phase (not `*` — the gateway holds vendor credentials), and
+`tests/test_web.py` asserts the preflight is answered for `POST /v1/chat`.

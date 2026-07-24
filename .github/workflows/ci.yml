@@ -35,3 +35,29 @@ jobs:
 
       - name: Test
         run: pytest
+
+  # The web console (Phase 6). Kept deliberately minimal: build the client and
+  # run the SSE parser's unit tests. No JavaScript linting stack alongside ruff —
+  # the point of the project is the gateway, not a second toolchain to maintain.
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test -- --run
+
+      - name: Build
+        run: npm run build

@@ -11,6 +11,7 @@ comment explaining *why* it exists), and the README when a user would ever set i
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The one import `core` takes from `domain`, and it is a constant: the name of
@@ -105,6 +106,29 @@ class Settings(BaseSettings):
     # Structured JSON logs are the right default for anything shipping to a log
     # aggregator; plain text is friendlier when tailing locally.
     log_format: Literal["json", "text"] = "json"
+
+    # --- Web console -------------------------------------------------------
+    # Browser origins allowed to call the API cross-origin (Phase 6). The web
+    # console runs on Vite's dev server and the API on :8000, so the two are
+    # cross-origin in development; served from `web/dist` by FastAPI they are
+    # same-origin and this does not apply. Deliberately NOT `*`: this is a
+    # gateway with vendor credentials behind it, and a wildcard is the kind of
+    # default that gets copied into production.
+    cors_allow_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+    @field_validator("cors_allow_origins", mode="before")
+    @classmethod
+    def _split_origins(cls, value: object) -> object:
+        """Accept a comma-separated string from the environment.
+
+        pydantic-settings parses a bare `list[str]` env var as JSON, which is an
+        unfriendly thing to ask an operator to write for a couple of URLs. A
+        plain `CORS_ALLOW_ORIGINS=http://a,http://b` is what people expect, so
+        split it here and leave an already-parsed list untouched.
+        """
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
 
 
 @lru_cache
