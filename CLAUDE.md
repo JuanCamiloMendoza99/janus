@@ -14,7 +14,7 @@ would hide.
 
 It is a **personal portfolio project** for Juan Camilo Mendoza (GitHub:
 `JuanCamiloMendoza99`) whose audience is **technical recruiters**. It is the
-companion to [Veridex](https://github.com/JuanCamiloMendoza99/veridex): Veridex
+companion to Veridex (private repo): Veridex
 covers retrieval, Janus covers the production layer. Quality bar: code and docs
 must read like a professional production project — clean, tested, documented, no
 dead code, no placeholder hacks left behind.

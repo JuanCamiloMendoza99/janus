@@ -41,8 +41,7 @@ test double.
 **Decision.** `LLMProvider` is a `runtime_checkable` `Protocol`. Implementations
 are structurally typed and inherit from nothing.
 
-This reuses the pattern already proven in the sibling
-[Veridex](https://github.com/JuanCamiloMendoza99/veridex) project, where
+This reuses the pattern already proven in the sibling Veridex project, where
 `EmbeddingsProvider` is a `Protocol` with `BedrockEmbeddings` and
 `FakeEmbeddings` implementations selected by settings and swapped in tests via
 `app.dependency_overrides`.

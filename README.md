@@ -11,9 +11,9 @@ looking in opposite directions. The name is the architecture: one entrance, two
 vendors behind it, and business code that cannot tell which one it is talking to.
 
 > Personal portfolio project by [Juan Camilo Mendoza](https://github.com/JuanCamiloMendoza99).
-> Companion to [Veridex](https://github.com/JuanCamiloMendoza99/veridex), which covers
-> the retrieval half of AI engineering; this one covers the production half —
-> provider portability, streaming, observability and unit economics.
+> It covers the production half of AI engineering — provider portability, streaming,
+> observability and unit economics. The retrieval half lives in a separate project,
+> Veridex, which is not public.
 
 ## Why this exists
 
@@ -145,7 +145,7 @@ call).
 
 | Tool | Kind | What it does |
 |---|---|---|
-| `search_kb` | read | Keyword search over a small in-repo corpus of support articles. Deliberately not a vector index — the sibling [Veridex](https://github.com/JuanCamiloMendoza99/veridex) project covers retrieval, and a second worse RAG system here would add nothing |
+| `search_kb` | read | Keyword search over a small in-repo corpus of support articles. Deliberately not a vector index — retrieval is covered by a sibling project, and a second worse RAG system here would add nothing |
 | `escalate_ticket` | write | Records an escalation and confirms it. Idempotent by ticket id: a model that repeats itself does not page a second human |
 
 One read tool and one write tool on purpose — they exercise different halves of
